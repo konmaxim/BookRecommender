@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BookRec</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* ── Reset ───────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    button { font: inherit; cursor: pointer; }
+    input  { font: inherit; }
+
+    /* ── Design tokens ───────────────────────────────────────────────────── */
+    :root {
+      /* Backgrounds */
+      --color-bg:          #111010;
+      --color-surface:     #1A1917;
+      --color-surface-2:   #221F1C;
+      --color-surface-3:   #2C2825;
+      /* Borders */
+      --color-border:      rgba(255,255,255,0.08);
+      --color-border-focus:#9C8B6E;
+      /* Text */
+      --color-text:        #EDE8E1;
+      --color-text-sub:    #A09890;
+      --color-text-muted:  #6E6660;
+      --color-text-dim:    #3E3A36;
+      /* Accent */
+      --color-accent:      #C4976A;
+      --color-accent-lt:   #2C2218;
+      --color-accent-dk:   #E0B888;
+      /* Semantic */
+      --color-like:        #4A9E6A;
+      --color-like-bg:     #111E16;
+      --color-like-border: #2A5C3A;
+      --color-skip:        #B05A4A;
+      --color-skip-bg:     #1E1210;
+      --color-skip-border: #5C2A22;
+      --color-save:        #C4976A;
+      --color-save-bg:     #1E1810;
+      --color-save-border: #5C4230;
+      /* Type scale */
+      --text-xs:   0.75rem;
+      --text-sm:   0.875rem;
+      --text-base: 1rem;
+      --text-md:   1.125rem;
+      --text-lg:   1.375rem;
+      --text-xl:   1.75rem;
+      --text-2xl:  2.25rem;
+      /* Spacing (4px base) */
+      --space-1:   4px;
+      --space-2:   8px;
+      --space-3:  12px;
+      --space-4:  16px;
+      --space-5:  20px;
+      --space-6:  24px;
+      --space-8:  32px;
+      --space-10: 40px;
+      --space-12: 48px;
+      --space-16: 64px;
+      --space-20: 80px;
+      /* Radii */
+      --radius-sm:   6px;
+      --radius-md:  10px;
+      --radius-lg:  16px;
+      --radius-pill: 9999px;
+      /* Transitions */
+      --dur-fast: 120ms;
+      --dur-mid:  220ms;
+      --dur-slow: 320ms;
+      --ease-out: cubic-bezier(0.2, 0, 0, 1);
+      /* Fonts */
+      --font-serif: 'Lora', Georgia, serif;
+      --font-sans:  'Inter', system-ui, sans-serif;
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: var(--font-sans);
+      font-size: var(--text-base);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Screen fade ─────────────────────────────────────────────────────── */
+    .screen {
+      min-height: 100vh;
+      padding-top: 52px; /* GlobalNav height */
+      animation: screenFade var(--dur-mid) ease both;
+    }
+    @keyframes screenFade {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* ── Spinner ─────────────────────────────────────────────────────────── */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--color-surface-3);
+      border-top-color: var(--color-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── GlobalNav ───────────────────────────────────────────────────────── */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 52px;
+      z-index: 200;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 var(--space-6);
+    }
+    .nav__wordmark {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-size: var(--text-base);
+      color: var(--color-text);
+      letter-spacing: 0.02em;
+      text-decoration: none;
+    }
+    .nav__auth {
+      display: flex; align-items: center; gap: var(--space-2);
+    }
+    .nav__auth-btn {
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      color: var(--color-text-sub);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      padding: 6px var(--space-3);
+      transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .nav__auth-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+    .nav__user-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--color-accent-lt);
+      border: 1px solid var(--color-accent);
+      color: var(--color-accent);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .nav__user-btn {
+      display: flex; align-items: center; gap: var(--space-2);
+      background: transparent;
+      border: none;
+      color: var(--color-text-sub);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      padding: 4px var(--space-2) 4px var(--space-1);
+      border-radius: var(--radius-pill);
+      transition: color var(--dur-fast) ease, background var(--dur-fast) ease;
+    }
+    .nav__user-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
+    .nav__browse-link {
+      background: transparent;
+      border: none;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      padding: 0;
+      transition: color var(--dur-fast) ease;
+    }
+    .nav__browse-link:hover { color: var(--color-accent); }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    .toast-wrap {
+      position: fixed; top: 64px; right: var(--space-5);
+      z-index: 9999;
+      display: flex; flex-direction: column; gap: var(--space-2);
+      pointer-events: none;
+    }
+    .toast {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 10px var(--space-4) 10px var(--space-3);
+      font-size: var(--text-sm);
+      font-weight: 500;
+      max-width: 300px;
+      display: flex; align-items: flex-start; gap: var(--space-2);
+      animation: toastIn var(--dur-mid) ease both;
+      pointer-events: auto;
+      overflow: hidden;
+    }
+    .toast::before {
+      content: '';
+      width: 3px; height: 100%;
+      position: absolute; left: 0; top: 0;
+      border-radius: 2px 0 0 2px;
+    }
+    .toast { position: relative; }
+    .toast--error   { color: var(--color-skip);  }
+    .toast--error::before   { background: var(--color-skip); }
+    .toast--success { color: var(--color-like);  }
+    .toast--success::before { background: var(--color-like); }
+    .toast--info    { color: var(--color-text-sub); }
+    .toast--info::before    { background: var(--color-text-muted); }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ── Modal overlay ───────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      z-index: 900;
+      background: rgba(0,0,0,0.64);
+      display: flex; align-items: center; justify-content: center;
+      padding: var(--space-5);
+      animation: overlayFade 180ms ease both;
+    }
+    @keyframes overlayFade {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .modal {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      width: 100%; max-width: 400px;
+      padding: var(--space-8) var(--space-8) var(--space-8);
+      position: relative;
+      animation: modalIn var(--dur-mid) var(--ease-out) both;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .modal__close {
+      position: absolute; top: var(--space-4); right: var(--space-4);
+      width: 28px; height: 28px;
+      background: var(--color-surface-2);
+      border: none;
+      border-radius: 50%;
+      color: var(--color-text-muted);
+      display: flex; align-items: center; justify-content: center;
+      transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .modal__close:hover { background: var(--color-surface-3); color: var(--color-text); }
+    .modal__close svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+    /* ── Auth modal ──────────────────────────────────────────────────────── */
+    .modal__heading {
+      font-family: var(--font-serif);
+      font-size: var(--text-lg);
+      font-weight: 600;
+      margin-bottom: var(--space-1);
+      line-height: 1.25;
+    }
+    .modal__sub {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-6);
+      line-height: 1.5;
+    }
+    .auth-tabs {
+      display: flex;
+      background: var(--color-surface-2);
+      border-radius: var(--radius-sm);
+      padding: 3px;
+      margin-bottom: var(--space-6);
+      gap: 2px;
+    }
+    .auth-tab {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--color-text-muted);
+      font-size: var(--text-sm); font-weight: 500;
+      padding: 7px;
+      border-radius: calc(var(--radius-sm) - 1px);
+      transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .auth-tab--active { background: var(--color-surface-3); color: var(--color-text); }
+
+    /* ── Form fields ─────────────────────────────────────────────────────── */
+    .field { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-5); }
+    .field__label {
+      font-size: var(--text-xs); font-weight: 600;
+      color: var(--color-text-muted);
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .field__input {
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-text);
+      font-size: var(--text-base);
+      padding: 10px var(--space-3);
+      outline: none;
+      width: 100%;
+      transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+    }
+    .field__input::placeholder { color: var(--color-text-dim); }
+    .field__input:focus {
+      border-color: var(--color-border-focus);
+      box-shadow: 0 0 0 3px var(--color-accent-lt);
+    }
+    .field__input--error { border-color: var(--color-skip) !important; box-shadow: 0 0 0 3px var(--color-skip-bg) !important; }
+    .field__hint {
+      font-size: var(--text-xs);
+      min-height: 1.2em;
+      color: var(--color-text-dim);
+    }
+    .field__hint--error { color: var(--color-skip); }
+    .field__hint--ok    { color: var(--color-like); }
+
+    .modal__submit {
+      width: 100%;
+      background: var(--color-accent);
+      color: var(--color-bg);
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 11px;
+      font-size: var(--text-sm); font-weight: 600;
+      display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+      transition: background var(--dur-fast) ease, transform var(--dur-fast) ease;
+      margin-top: var(--space-2);
+    }
+    .modal__submit:hover:not(:disabled) { background: var(--color-accent-dk); }
+    .modal__submit:active:not(:disabled) { transform: scale(0.98); }
+    .modal__submit:disabled { opacity: 0.35; cursor: default; }
+
+    /* ── Auth success ────────────────────────────────────────────────────── */
+    .modal__success {
+      display: flex; flex-direction: column; align-items: flex-start;
+      gap: var(--space-2);
+      animation: screenFade var(--dur-mid) ease both;
+      padding: var(--space-2) 0;
+    }
+    .modal__success-title { font-family: var(--font-serif); font-size: var(--text-lg); font-weight: 600; }
+    .modal__success-sub { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+    /* ── Account modal ───────────────────────────────────────────────────── */
+    .account-name {
+      font-family: var(--font-serif);
+      font-size: var(--text-lg); font-weight: 600;
+      margin-bottom: var(--space-1);
+    }
+    .account-sub {
+      font-size: var(--text-sm); color: var(--color-text-muted);
+      margin-bottom: var(--space-6);
+    }
+    .btn-logout {
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--color-skip-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-skip);
+      padding: 10px;
+      font-size: var(--text-sm); font-weight: 500;
+      transition: background var(--dur-fast) ease;
+    }
+    .btn-logout:hover { background: var(--color-skip-bg); }
+
+    /* ── Browse screen ───────────────────────────────────────────────────── */
+    .browser {
+      max-width: 720px;
+      margin: 0 auto;
+      padding-bottom: var(--space-20);
+    }
+    .browser__header {
+      padding: var(--space-10) var(--space-6) var(--space-5);
+    }
+    .browser__title {
+      font-family: var(--font-serif);
+      font-size: var(--text-xl); font-weight: 600;
+      line-height: 1.2;
+      margin-bottom: var(--space-1);
+    }
+    .browser__subtitle {
+      font-size: var(--text-sm); color: var(--color-text-muted);
+      min-height: 1.4em;
+    }
+    .browser__error {
+      text-align: center; color: var(--color-skip);
+      padding: var(--space-16) var(--space-6); font-size: var(--text-sm);
+    }
+
+    /* ── Search bar ──────────────────────────────────────────────────────── */
+    .search-wrap {
+      padding: 0 var(--space-6) var(--space-4);
+    }
+    .search-inner {
+      position: relative;
+    }
+    .search-icon {
+      position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+      color: var(--color-text-dim);
+      pointer-events: none;
+      display: flex; align-items: center;
+    }
+    .search-icon svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .search-input {
+      width: 100%;
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-text);
+      font-size: var(--text-sm);
+      padding: 9px var(--space-8) 9px var(--space-8);
+      outline: none;
+      transition: border-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease;
+    }
+    .search-input::placeholder { color: var(--color-text-dim); }
+    .search-input:focus { border-color: var(--color-border-focus); box-shadow: 0 0 0 3px var(--color-accent-lt); }
+    .search-clear {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: var(--color-surface-3); border: none;
+      width: 20px; height: 20px; border-radius: 50%;
+      color: var(--color-text-muted);
+      font-size: 10px;
+      display: flex; align-items: center; justify-content: center;
+      transition: color var(--dur-fast) ease;
+    }
+    .search-clear:hover { color: var(--color-text); }
+
+    /* ── Genre filter bar ────────────────────────────────────────────────── */
+    .genre-bar {
+      position: sticky; top: 52px; z-index: 100;
+      background: var(--color-bg);
+      border-bottom: 1px solid var(--color-border);
+      padding: var(--space-3) 0;
+    }
+    .genre-pills {
+      display: flex; gap: var(--space-2);
+      padding: 0 var(--space-6);
+      overflow-x: auto;
+      scrollbar-width: none; -ms-overflow-style: none;
+    }
+    .genre-pills::-webkit-scrollbar { display: none; }
+    .genre-pill {
+      flex-shrink: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--color-text-muted);
+      font-size: var(--text-xs); font-weight: 500;
+      padding: 5px var(--space-3);
+      white-space: nowrap;
+      transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease, background var(--dur-fast) ease;
+    }
+    .genre-pill:hover { border-color: var(--color-accent); color: var(--color-accent); }
+    .genre-pill--active {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+      background: var(--color-accent-lt);
+    }
+
+    /* ── Book grid (spine list) ───────────────────────────────────────────── */
+    .book-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      padding: var(--space-4) var(--space-6) 0;
+      border-top: 1px solid var(--color-border);
+    }
+    .book-grid-item {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease;
+      position: relative;
+    }
+    .book-grid-item:hover { background: var(--color-surface-2); }
+    .book-grid-item--selected {
+      background: var(--color-accent-lt);
+      border-color: var(--color-accent);
+    }
+    .book-spine {
+      width: 10px; height: 44px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .book-info { flex: 1; min-width: 0; }
+    .book-info__title {
+      font-family: var(--font-serif);
+      font-size: var(--text-sm);
+      font-weight: 400;
+      line-height: 1.35;
+      color: var(--color-text-sub);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      transition: color var(--dur-fast) ease;
+    }
+    .book-grid-item--selected .book-info__title {
+      color: var(--color-accent);
+      font-weight: 600;
+    }
+    .book-info__author {
+      font-size: var(--text-xs);
+      color: var(--color-text-dim);
+      margin-top: 2px;
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
+    .book-check {
+      width: 16px; height: 16px;
+      flex-shrink: 0;
+      color: var(--color-accent);
+      opacity: 0;
+      transition: opacity var(--dur-fast) ease;
+    }
+    .book-grid-item--selected .book-check { opacity: 1; }
+    .book-check svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ── Empty state ─────────────────────────────────────────────────────── */
+    .empty-state {
+      padding: var(--space-16) var(--space-6);
+      text-align: center;
+    }
+    .empty-state__text {
+      font-size: var(--text-sm); color: var(--color-text-muted);
+      margin-bottom: var(--space-4);
+    }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-text-muted);
+      font-size: var(--text-sm); font-weight: 500;
+      padding: 8px var(--space-5);
+      transition: border-color var(--dur-fast) ease, color var(--dur-fast) ease;
+    }
+    .btn-ghost:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+    /* ── Save footer ─────────────────────────────────────────────────────── */
+    .save-footer {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--color-bg);
+      border-top: 1px solid var(--color-border);
+      padding: var(--space-3) var(--space-6) var(--space-5);
+      display: flex; justify-content: center;
+    }
+    .btn-save {
+      background: var(--color-accent);
+      color: var(--color-bg);
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 11px var(--space-10);
+      font-size: var(--text-sm); font-weight: 600;
+      display: flex; align-items: center; gap: var(--space-2);
+      min-width: 200px; justify-content: center;
+      transition: background var(--dur-fast) ease, transform var(--dur-fast) ease;
+    }
+    .btn-save:hover:not(:disabled) { background: var(--color-accent-dk); }
+    .btn-save:active:not(:disabled) { transform: scale(0.98); }
+    .btn-save:disabled { opacity: 0.28; cursor: default; }
+    .btn-save__count {
+      font-size: var(--text-xs); font-weight: 600;
+      color: rgba(17,16,16,0.6);
+    }
+
+    /* ── Loading center ──────────────────────────────────────────────────── */
+    .loading-center {
+      display: flex; flex-direction: column; align-items: center; gap: var(--space-3);
+      padding: var(--space-16) 0;
+    }
+    .loading-text { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+    /* ── Feed screen ─────────────────────────────────────────────────────── */
+    .feed {
+      max-width: 640px;
+      margin: 0 auto;
+      padding-right: var(--space-6);
+      padding-bottom: var(--space-20);
+      padding-left: var(--space-6);
+    }
+    .feed__header {
+      padding: var(--space-10) 0 var(--space-6);
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: 0;
+    }
+    .feed__title {
+      font-family: var(--font-serif);
+      font-size: var(--text-xl); font-weight: 600;
+      line-height: 1.2;
+    }
+    .feed__count {
+      margin-top: var(--space-1);
+      font-size: var(--text-sm); color: var(--color-text-muted);
+      min-height: 1.4em;
+    }
+
+    /* ── Error banner ────────────────────────────────────────────────────── */
+    .error-banner {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+      background: var(--color-skip-bg);
+      border-left: 3px solid var(--color-skip);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      padding: var(--space-3) var(--space-4);
+      font-size: var(--text-sm); color: var(--color-skip);
+      margin: var(--space-4) 0;
+    }
+    .error-retry {
+      background: transparent;
+      border: 1px solid var(--color-skip-border);
+      border-radius: var(--radius-sm);
+      color: var(--color-skip);
+      font-size: var(--text-xs); font-weight: 600;
+      padding: 4px 10px;
+      white-space: nowrap; flex-shrink: 0;
+      transition: background var(--dur-fast) ease;
+    }
+    .error-retry:hover { background: var(--color-skip-bg); }
+
+    /* ── Book card ───────────────────────────────────────────────────────── */
+    .book-card {
+      padding: var(--space-6) 0;
+      border-bottom: 1px solid var(--color-border);
+      transition:
+        opacity var(--dur-slow) var(--ease-out),
+        transform var(--dur-slow) var(--ease-out);
+      will-change: opacity, transform;
+    }
+    .book-card--removing-right {
+      opacity: 0;
+      transform: translateX(56px);
+      pointer-events: none;
+    }
+    .book-card--removing-left {
+      opacity: 0;
+      transform: translateX(-56px);
+      pointer-events: none;
+    }
+    .book-card__meta {
+      display: flex; align-items: center; gap: var(--space-3);
+      margin-bottom: var(--space-3);
+    }
+    .book-card__genre {
+      font-size: var(--text-xs); font-weight: 500;
+      color: var(--color-text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .score-badge {
+      font-size: var(--text-xs); font-weight: 600;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+    }
+    .score-badge--high { color: var(--color-like); background: var(--color-like-bg); }
+    .score-badge--mid  { color: var(--color-save); background: var(--color-save-bg); }
+    .score-badge--low  { color: var(--color-text-muted); background: var(--color-surface-2); }
+
+    .book-card__title {
+      font-family: var(--font-serif);
+      font-size: var(--text-md); font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: var(--space-3);
+      color: var(--color-text);
+    }
+    .book-card__desc {
+      font-size: var(--text-sm); color: var(--color-text-sub);
+      line-height: 1.65;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: var(--space-4);
+    }
+
+    /* ── Action bar ──────────────────────────────────────────────────────── */
+    .action-bar {
+      display: flex; gap: var(--space-2);
+    }
+    .action-btn {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+      border-radius: var(--radius-sm);
+      padding: 9px var(--space-3);
+      font-size: var(--text-xs); font-weight: 500;
+      border: 1px solid;
+      background: transparent;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: background var(--dur-fast) ease, transform var(--dur-fast) ease;
+    }
+    .action-btn:active:not(:disabled) { transform: scale(0.97); }
+    .action-btn:disabled { opacity: 0.4; cursor: default; }
+    .action-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .action-btn--like { border-color: var(--color-like-border); color: var(--color-like); }
+    .action-btn--like:hover:not(:disabled) { background: var(--color-like-bg); }
+    .action-btn--skip { border-color: var(--color-skip-border); color: var(--color-skip); }
+    .action-btn--skip:hover:not(:disabled) { background: var(--color-skip-bg); }
+    .action-btn--save { border-color: var(--color-save-border); color: var(--color-save); }
+    .action-btn--save:hover:not(:disabled) { background: var(--color-save-bg); }
+
+    /* ── Feed loading inline ─────────────────────────────────────────────── */
+    .feed-loading {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-6) 0;
+    }
+    .feed-loading__text { font-size: var(--text-sm); color: var(--color-text-muted); }
+
+    /* ── Feed empty state ────────────────────────────────────────────────── */
+    .feed-empty {
+      padding: var(--space-16) 0;
+    }
+    .feed-empty__em {
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: var(--text-md);
+      color: var(--color-text-muted);
+      display: block;
+      margin-bottom: var(--space-4);
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .nav { padding: 0 var(--space-4); }
+      .browser__header { padding: var(--space-8) var(--space-4) var(--space-4); }
+      .browser__title { font-size: calc(var(--text-xl) * 0.88); }
+      .search-wrap { padding: 0 var(--space-4) var(--space-4); }
+      .genre-pills { padding: 0 var(--space-4); }
+      .book-grid { grid-template-columns: 1fr; padding: var(--space-3) var(--space-4) 0; }
+      .save-footer { padding: var(--space-3) var(--space-4) var(--space-5); }
+      .btn-save { width: 100%; }
+
+      .feed { padding: 0 var(--space-4) var(--space-20); }
+      .feed__header { padding: var(--space-8) 0 var(--space-5); }
+      .feed__title { font-size: calc(var(--text-xl) * 0.88); }
+
+      .toast-wrap { top: auto; bottom: 72px; right: var(--space-4); left: var(--space-4); }
+      .toast { max-width: 100%; }
+
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal { border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: var(--space-6) var(--space-5) var(--space-10); max-width: 100%; }
+
+      .action-btn span { display: none; }
+      .action-btn { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const API_BASE     = "http://localhost:8000";
+    const ANIM_MS      = 340;
+    const LOW_THRESHOLD = 5;
+
+    // ── SVG icons ──────────────────────────────────────────────────────────────
+
+    const IconCheck = () => (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    );
+    const IconArrowRight = () => (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <line x1="5" y1="12" x2="19" y2="12" />
+        <polyline points="13 6 19 12 13 18" />
+      </svg>
+    );
+    const IconBookmark = () => (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+      </svg>
+    );
+    const IconX = () => (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    );
+    const IconSearch = () => (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    );
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    function getOrCreateUserId() {
+      let id = localStorage.getItem("bookrec_user_id");
+      if (!id) {
+        id = `u_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        localStorage.setItem("bookrec_user_id", id);
+      }
+      return id;
+    }
+
+    function getInitials(name) {
+      return (name || "?")
+        .split(/\s+/).slice(0, 2)
+        .map(w => w[0] || "").join("").toUpperCase() || "?";
+    }
+
+    function bubbleColor(str) {
+      let h = 5381;
+      for (let i = 0; i < str.length; i++) {
+        h = (((h << 5) + h) ^ str.charCodeAt(i)) >>> 0;
+      }
+      const hue = h % 360;
+      return `hsl(${hue}, 30%, 30%)`;
+    }
+
+    // ── Toast ──────────────────────────────────────────────────────────────────
+
+    function Toast({ toasts }) {
+      return (
+        <div className="toast-wrap">
+          {toasts.map(t => (
+            <div key={t.id} className={`toast toast--${t.type}`}>{t.message}</div>
+          ))}
+        </div>
+      );
+    }
+
+    // ── GlobalNav ──────────────────────────────────────────────────────────────
+
+    function GlobalNav({ dbName, onAuthClick, screen, onBrowse }) {
+      return (
+        <nav className="nav">
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-5)" }}>
+            <button
+              className="nav__wordmark"
+              onClick={onBrowse}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >BookRec</button>
+            {screen === "feed" && (
+              <button className="nav__browse-link" onClick={onBrowse}>Browse</button>
+            )}
+          </div>
+          <div className="nav__auth">
+            {dbName ? (
+              <button className="nav__user-btn" onClick={onAuthClick} aria-label="Account">
+                <div className="nav__user-avatar">{getInitials(dbName)}</div>
+                <span>{dbName}</span>
+              </button>
+            ) : (
+              <button className="nav__auth-btn" onClick={onAuthClick}>Sign in</button>
+            )}
+          </div>
+        </nav>
+      );
+    }
+
+    // ── BookBrowserScreen ──────────────────────────────────────────────────────
+
+    const GENRE_META = {
+      "Биографии":              { icon: "🏅" },
+      "Детективы":              { icon: "🔍" },
+      "История":                { icon: "🏛️" },
+      "Повести":                { icon: "📖" },
+      "Приключения":            { icon: "🗺️" },
+      "Программирование":       { icon: "💻" },
+      "Психология":             { icon: "🧠" },
+      "Романтика":              { icon: "💖" },
+      "Саморазвитие":           { icon: "🌱" },
+      "Ужасы":                  { icon: "👁️" },
+      "Философия":              { icon: "🧿" },
+      "Фэнтези":                { icon: "✨" },
+      "Экономика":              { icon: "📊" },
+      "Зарубежная литература":  { icon: "🌍" },
+      "Классическая литература":{ icon: "📜" },
+      "Научная фантастика":     { icon: "🚀" },
+      "Поэзия и драматургия":   { icon: "🎭" },
+    };
+
+    function BookGridItem({ book, selected, onToggle }) {
+      const spineColor = React.useMemo(() => bubbleColor(book.title + book.author), [book.title, book.author]);
+      return (
+        <div
+          className={`book-grid-item${selected ? " book-grid-item--selected" : ""}`}
+          onClick={() => onToggle(book.book_id)}
+          onKeyDown={e => (e.key === "Enter" || e.key === " ") && onToggle(book.book_id)}
+          role="checkbox"
+          aria-checked={selected}
+          tabIndex={0}
+        >
+          <div className="book-spine" style={{ background: spineColor }} />
+          <div className="book-info">
+            <div className="book-info__title">{book.title}</div>
+            {book.author && <div className="book-info__author">{book.author}</div>}
+          </div>
+          <div className="book-check" aria-hidden="true">
+            <IconCheck />
+          </div>
+        </div>
+      );
+    }
+
+    function BookBrowserScreen({ onComplete, showToast, onNeedRegister }) {
+      const [allBooks,    setAllBooks]    = React.useState([]);
+      const [selected,    setSelected]    = React.useState(new Set());
+      const [activeGenre, setActiveGenre] = React.useState(null);
+      const [searchQuery, setSearchQuery] = React.useState("");
+      const [loading,     setLoading]     = React.useState(true);
+      const [saving,      setSaving]      = React.useState(false);
+      const [fetchError,  setFetchError]  = React.useState(null);
+
+      React.useEffect(() => {
+        fetch(`${API_BASE}/books`)
+          .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+          .then(data => { setAllBooks(data); setLoading(false); })
+          .catch(() => { setFetchError("Couldn't load books — is the server running?"); setLoading(false); });
+      }, []);
+
+      const genres = React.useMemo(() => {
+        const seen = new Set();
+        return allBooks.map(b => b.genre).filter(g => g && !seen.has(g) && seen.add(g));
+      }, [allBooks]);
+
+      const displayed = React.useMemo(() => {
+        let books = activeGenre ? allBooks.filter(b => b.genre === activeGenre) : allBooks;
+        const q = searchQuery.trim().toLowerCase();
+        if (q) books = books.filter(b =>
+          b.title?.toLowerCase().includes(q) || b.author?.toLowerCase().includes(q)
+        );
+        return books;
+      }, [allBooks, activeGenre, searchQuery]);
+
+      const toggleGenre = g => setActiveGenre(prev => prev === g ? null : g);
+
+      const toggleBook = React.useCallback(id => {
+        setSelected(prev => {
+          const next = new Set(prev);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+      }, []);
+
+      const handleSave = async () => {
+        if (saving) return;
+        const dbUserId = localStorage.getItem("bookrec_db_user_id");
+        if (!dbUserId) {
+          showToast("Sign in to save your picks.", "info");
+          onNeedRegister();
+          return;
+        }
+        if (selected.size === 0) {
+          showToast("Select at least one book.", "info");
+          return;
+        }
+        setSaving(true);
+        try {
+          const res = await fetch(`${API_BASE}/save-books`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: parseInt(dbUserId), book_ids: [...selected] }),
+          });
+          if (!res.ok) throw new Error();
+          showToast(`${selected.size} book${selected.size !== 1 ? "s" : ""} saved.`, "success");
+          localStorage.setItem("bookrec_onboarded", "true");
+          onComplete();
+        } catch {
+          showToast("Couldn't save — please try again.", "error");
+          setSaving(false);
+        }
+      };
+
+      const subtitle = selected.size === 0
+        ? "Select books you've enjoyed"
+        : `${selected.size} book${selected.size !== 1 ? "s" : ""} selected`;
+
+      if (loading) return (
+        <div className="screen browser">
+          <div className="loading-center" style={{ paddingTop: 60 }}>
+            <div className="spinner" />
+            <span className="loading-text">Loading books…</span>
+          </div>
+        </div>
+      );
+
+      if (fetchError) return (
+        <div className="screen browser">
+          <div className="browser__error">{fetchError}</div>
+        </div>
+      );
+
+      return (
+        <div className="screen browser">
+          <div className="browser__header">
+            <h1 className="browser__title">Browse books</h1>
+            <p className="browser__subtitle">{subtitle}</p>
+          </div>
+
+          <div className="search-wrap">
+            <div className="search-inner">
+              <span className="search-icon"><IconSearch /></span>
+              <input
+                className="search-input"
+                type="search"
+                placeholder="Search by title or author…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                aria-label="Search books"
+              />
+              {searchQuery && (
+                <button className="search-clear" onClick={() => setSearchQuery("")} aria-label="Clear search">
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="genre-bar">
+            <div className="genre-pills">
+              {genres.map(g => {
+                const meta = GENRE_META[g];
+                return (
+                  <button
+                    key={g}
+                    className={`genre-pill${activeGenre === g ? " genre-pill--active" : ""}`}
+                    onClick={() => toggleGenre(g)}
+                  >
+                    {meta ? `${meta.icon} ` : ""}{g}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {displayed.length === 0 ? (
+            <div className="empty-state">
+              <p className="empty-state__text">
+                {searchQuery ? `No books found for "${searchQuery}".` : "No books in this genre."}
+              </p>
+              {searchQuery && (
+                <button className="btn-ghost" onClick={() => setSearchQuery("")}>Clear search</button>
+              )}
+            </div>
+          ) : (
+            <div className="book-grid">
+              {displayed.map(book => (
+                <BookGridItem
+                  key={book.book_id}
+                  book={book}
+                  selected={selected.has(book.book_id)}
+                  onToggle={toggleBook}
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="save-footer">
+            <button className="btn-save" disabled={saving} onClick={handleSave}>
+              {saving
+                ? <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Saving…</>
+                : <>Save picks{selected.size > 0 && <span className="btn-save__count">({selected.size})</span>}</>
+              }
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── BookCard ───────────────────────────────────────────────────────────────
+
+    function BookCard({ book, removingDir, onInteract }) {
+      const [disabled, setDisabled] = React.useState(false);
+
+      const handle = event => {
+        if (disabled) return;
+        setDisabled(true);
+        onInteract(book.item_id, event);
+      };
+
+      const pct        = book.score != null ? Math.round(book.score * 100) : null;
+      const scoreClass = book.score == null  ? "low"
+                       : book.score >= 0.75  ? "high"
+                       : book.score >= 0.5   ? "mid"
+                       : "low";
+
+      const removingClass = removingDir === "right" ? " book-card--removing-right"
+                          : removingDir === "left"  ? " book-card--removing-left"
+                          : "";
+
+      return (
+        <article className={`book-card${removingClass}`}>
+          <div className="book-card__meta">
+            {book.genre && <span className="book-card__genre">{book.genre}</span>}
+            {pct !== null && (
+              <span className={`score-badge score-badge--${scoreClass}`}>{pct}% match</span>
+            )}
+          </div>
+          <h2 className="book-card__title">{book.title}</h2>
+          {book.description && <p className="book-card__desc">{book.description}</p>}
+          <div className="action-bar">
+            <button
+              className="action-btn action-btn--like"
+              onClick={() => handle("like")}
+              disabled={disabled}
+              aria-label="Like"
+            >
+              <IconCheck /><span>Like</span>
+            </button>
+            <button
+              className="action-btn action-btn--skip"
+              onClick={() => handle("skip")}
+              disabled={disabled}
+              aria-label="Skip"
+            >
+              <IconArrowRight /><span>Skip</span>
+            </button>
+            <button
+              className="action-btn action-btn--save"
+              onClick={() => handle("save")}
+              disabled={disabled}
+              aria-label="Save"
+            >
+              <IconBookmark /><span>Save</span>
+            </button>
+          </div>
+        </article>
+      );
+    }
+
+    // ── FeedScreen ─────────────────────────────────────────────────────────────
+
+    function FeedScreen({ userId, dbUserId, showToast }) {
+      const [books,        setBooks]        = React.useState([]);
+      const [removingDirs, setRemovingDirs] = React.useState({});  // {itemId: "left"|"right"}
+      const [loading,      setLoading]      = React.useState(true);
+      const [error,        setError]        = React.useState(null);
+      const seenIdsRef  = React.useRef(new Set());
+      const fetchingRef = React.useRef(false);
+
+      const fetchRecs = React.useCallback(async () => {
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
+        setLoading(true);
+        setError(null);
+        try {
+          const params = new URLSearchParams({ top_k: 20 });
+          if (dbUserId) params.set("db_user_id", dbUserId);
+          if (seenIdsRef.current.size > 0) params.set("seen", [...seenIdsRef.current].join(","));
+          const res = await fetch(`${API_BASE}/recommendations?${params}`);
+          if (!res.ok) throw new Error(res.status);
+          const data = await res.json();
+          setBooks(prev => {
+            const prevIds = new Set(prev.map(b => b.item_id));
+            const fresh = data.filter(b => !prevIds.has(b.item_id));
+            fresh.forEach(b => seenIdsRef.current.add(b.item_id));
+            return [...prev, ...fresh];
+          });
+        } catch {
+          setError("Couldn't load recommendations.");
+          showToast("Failed to load recommendations.", "error");
+        } finally {
+          setLoading(false);
+          fetchingRef.current = false;
+        }
+      }, [dbUserId, showToast]);
+
+      React.useEffect(() => { fetchRecs(); }, []);
+
+      React.useEffect(() => {
+        const active = books.filter(b => !removingDirs[b.item_id]).length;
+        if (!loading && !error && active > 0 && active < LOW_THRESHOLD) fetchRecs();
+      }, [books, removingDirs, loading, error, fetchRecs]);
+
+      const handleInteract = React.useCallback(async (itemId, event) => {
+        const dir = (event === "skip") ? "left" : "right";
+        setRemovingDirs(prev => ({ ...prev, [itemId]: dir }));
+
+        setTimeout(() => {
+          setBooks(prev => prev.filter(b => b.item_id !== itemId));
+          setRemovingDirs(prev => { const n = { ...prev }; delete n[itemId]; return n; });
+        }, ANIM_MS);
+
+        try {
+          await fetch(`${API_BASE}/interact`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id:    userId,
+              db_user_id: dbUserId ? parseInt(dbUserId) : null,
+              item_id:    itemId,
+              event,
+            }),
+          });
+        } catch { /* best-effort */ }
+      }, [userId, dbUserId]);
+
+      const activeBooks = books.filter(b => !removingDirs[b.item_id]);
+      const isEmpty = !loading && !error && books.length === 0;
+
+      return (
+        <div className="screen feed">
+          <div className="feed__header">
+            <h1 className="feed__title">For you</h1>
+            <p className="feed__count">
+              {activeBooks.length > 0 ? `${activeBooks.length} pick${activeBooks.length !== 1 ? "s" : ""} waiting` : ""}
+            </p>
+          </div>
+
+          {error && (
+            <div className="error-banner">
+              <span>⚠ {error}</span>
+              <button className="error-retry" onClick={fetchRecs}>Retry</button>
+            </div>
+          )}
+
+          <div>
+            {books.map(book => (
+              <BookCard
+                key={book.item_id}
+                book={book}
+                removingDir={removingDirs[book.item_id] || null}
+                onInteract={handleInteract}
+              />
+            ))}
+          </div>
+
+          {loading && (
+            <div className="feed-loading">
+              <div className="spinner" />
+              <span className="feed-loading__text">Finding books for you…</span>
+            </div>
+          )}
+
+          {isEmpty && (
+            <div className="feed-empty">
+              <em className="feed-empty__em">— You're all caught up.</em>
+              <button className="btn-ghost" onClick={fetchRecs}>Refresh</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── AuthModal ──────────────────────────────────────────────────────────────
+
+    const NAME_MIN = 2;
+    const NAME_MAX = 50;
+    const NAME_RE  = /^[\w\s'\-]+$/u;
+
+    function validateName(raw) {
+      const v = raw.trim();
+      if (!v)                  return { msg: "Name is required.", ok: false };
+      if (v.length < NAME_MIN) return { msg: `At least ${NAME_MIN} characters.`, ok: false };
+      if (v.length > NAME_MAX) return { msg: `Maximum ${NAME_MAX} characters.`, ok: false };
+      if (!NAME_RE.test(v))    return { msg: "Letters, numbers, spaces, hyphens, apostrophes only.", ok: false };
+      return { msg: "Looks good.", ok: true };
+    }
+
+    function AuthModal({ onClose, showToast, initialMode = "register" }) {
+      const [mode,       setMode]       = React.useState(initialMode);
+      const [name,       setName]       = React.useState("");
+      const [touched,    setTouched]    = React.useState(false);
+      const [submitting, setSubmitting] = React.useState(false);
+      const [success,    setSuccess]    = React.useState(null);
+      const inputRef = React.useRef(null);
+
+      React.useEffect(() => {
+        inputRef.current?.focus();
+        const onKey = e => { if (e.key === "Escape") onClose(); };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [onClose]);
+
+      const switchMode = m => {
+        setMode(m); setName(""); setTouched(false); setSubmitting(false); setSuccess(null);
+        setTimeout(() => inputRef.current?.focus(), 40);
+      };
+
+      const validation = validateName(name);
+      const showError  = touched && !validation.ok;
+      const showOk     = touched && validation.ok;
+
+      const handleSubmit = async e => {
+        e.preventDefault();
+        setTouched(true);
+        if (!validation.ok || submitting) return;
+        setSubmitting(true);
+        try {
+          const res = await fetch(`${API_BASE}/${mode === "register" ? "register" : "login"}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name.trim() }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            showToast(data.detail || data.error || (mode === "register" ? "Registration failed." : "Login failed."), "error");
+            setSubmitting(false);
+            return;
+          }
+          localStorage.setItem("bookrec_db_user_id",   String(data.id));
+          localStorage.setItem("bookrec_db_user_name", data.name);
+          setSuccess(data);
+          showToast(mode === "register" ? `Welcome, ${data.name}.` : `Welcome back, ${data.name}.`, "success");
+          setTimeout(onClose, 2000);
+        } catch {
+          showToast("Couldn't connect — is the server running?", "error");
+          setSubmitting(false);
+        }
+      };
+
+      return (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+          <div className="modal" role="dialog" aria-modal="true">
+            <button className="modal__close" onClick={onClose} aria-label="Close">
+              <IconX />
+            </button>
+
+            {success ? (
+              <div className="modal__success">
+                <div className="modal__success-title">
+                  {mode === "register" ? `Welcome, ${success.name}.` : `Welcome back, ${success.name}.`}
+                </div>
+                <div className="modal__success-sub">
+                  {mode === "register" ? "Your account is ready." : "You're logged in."}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="auth-tabs">
+                  <button className={`auth-tab${mode === "register" ? " auth-tab--active" : ""}`} type="button" onClick={() => switchMode("register")}>Sign up</button>
+                  <button className={`auth-tab${mode === "login"    ? " auth-tab--active" : ""}`} type="button" onClick={() => switchMode("login")}>Log in</button>
+                </div>
+
+                <h2 className="modal__heading">
+                  {mode === "register" ? "Create an account" : "Welcome back"}
+                </h2>
+                <p className="modal__sub">
+                  {mode === "register"
+                    ? "Pick a display name to save your preferences."
+                    : "Enter your display name to continue."}
+                </p>
+
+                <form onSubmit={handleSubmit} noValidate>
+                  <div className="field">
+                    <label className="field__label" htmlFor="auth-name">Display name</label>
+                    <input
+                      id="auth-name"
+                      ref={inputRef}
+                      className={`field__input${showError ? " field__input--error" : ""}`}
+                      type="text"
+                      placeholder="e.g. Elena Morozova"
+                      value={name}
+                      maxLength={NAME_MAX + 5}
+                      onChange={e => setName(e.target.value)}
+                      onBlur={() => setTouched(true)}
+                      autoComplete="nickname"
+                      spellCheck={false}
+                    />
+                    <span className={`field__hint${showError ? " field__hint--error" : showOk ? " field__hint--ok" : ""}`}>
+                      {touched ? validation.msg : `${NAME_MIN}–${NAME_MAX} characters`}
+                    </span>
+                  </div>
+                  <button
+                    type="submit"
+                    className="modal__submit"
+                    disabled={submitting || (touched && !validation.ok)}
+                  >
+                    {submitting
+                      ? <><div className="spinner" style={{ width: 16, height: 16, borderWidth: 2, borderTopColor: "var(--color-bg)" }} /> {mode === "register" ? "Creating…" : "Logging in…"}</>
+                      : mode === "register" ? "Create account" : "Log in"}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── AccountModal ───────────────────────────────────────────────────────────
+
+    function AccountModal({ name, onClose, onLogout }) {
+      React.useEffect(() => {
+        const onKey = e => { if (e.key === "Escape") onClose(); };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [onClose]);
+
+      return (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+          <div className="modal" role="dialog" aria-modal="true">
+            <button className="modal__close" onClick={onClose} aria-label="Close"><IconX /></button>
+            <div className="account-name">{name}</div>
+            <div className="account-sub">Logged in</div>
+            <button className="btn-logout" onClick={onLogout}>Log out</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── App ────────────────────────────────────────────────────────────────────
+
+    function App() {
+      const userIdRef = React.useRef(getOrCreateUserId());
+      const [screen,       setScreen]       = React.useState(() =>
+        localStorage.getItem("bookrec_onboarded") === "true" ? "feed" : "browse"
+      );
+      const [toasts,       setToasts]       = React.useState([]);
+      const [showAuth,     setShowAuth]     = React.useState(false);
+      const [dbUserId,     setDbUserId]     = React.useState(() => localStorage.getItem("bookrec_db_user_id"));
+      const [dbName,       setDbName]       = React.useState(() => localStorage.getItem("bookrec_db_user_name"));
+
+      const showToast = React.useCallback((message, type = "info") => {
+        const id = Date.now() + Math.random();
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+      }, []);
+
+      const goToFeed   = React.useCallback(() => setScreen("feed"), []);
+      const goToBrowse = React.useCallback(() => setScreen("browse"), []);
+      const openAuth   = React.useCallback(() => setShowAuth(true), []);
+
+      const handleAuthSuccess = React.useCallback(() => {
+        setDbUserId(localStorage.getItem("bookrec_db_user_id"));
+        setDbName(localStorage.getItem("bookrec_db_user_name"));
+        setShowAuth(false);
+      }, []);
+
+      const handleLogout = React.useCallback(() => {
+        localStorage.removeItem("bookrec_db_user_id");
+        localStorage.removeItem("bookrec_db_user_name");
+        localStorage.removeItem("bookrec_onboarded");
+        setDbUserId(null);
+        setDbName(null);
+        setShowAuth(false);
+        setScreen("browse");
+        showToast("Logged out.", "info");
+      }, [showToast]);
+
+      return (
+        <>
+          <Toast toasts={toasts} />
+          <GlobalNav dbName={dbName} onAuthClick={() => setShowAuth(true)} screen={screen} onBrowse={goToBrowse} />
+
+          {showAuth && (
+            dbName
+              ? <AccountModal name={dbName} onClose={() => setShowAuth(false)} onLogout={handleLogout} />
+              : <AuthModal onClose={handleAuthSuccess} showToast={showToast} />
+          )}
+
+          {screen === "browse" && (
+            <BookBrowserScreen
+              key="browse"
+              onComplete={goToFeed}
+              showToast={showToast}
+              onNeedRegister={openAuth}
+            />
+          )}
+          {screen === "feed" && (
+            <FeedScreen
+              key={`feed-${dbUserId}`}
+              userId={userIdRef.current}
+              dbUserId={dbUserId}
+              showToast={showToast}
+            />
+          )}
+        </>
+      );
+    }
+
+    // ── Mount ──────────────────────────────────────────────────────────────────
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

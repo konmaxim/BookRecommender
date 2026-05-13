@@ -1,0 +1,11 @@
+.env
+.DS_Store
+bookrecommender.egg-info/
+bookrec/scraper/
+**/__pycache__/
+*.pyc
+eda/.ipynb_checkpoints
+eda/validation/
+venv/ 
+tests/
+data/
