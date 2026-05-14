@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+RECSYS_VERSION = "themes_v1"
+
 
 class RecommendEngine:
 

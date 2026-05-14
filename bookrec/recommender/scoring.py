@@ -13,6 +13,7 @@ def score_one_book(
     theme_index: dict[str, int],
 ) -> float:
     total = 0.0
+    prominence_sum = sum(p for t, p in book_themes.items() if t in theme_index)
 
     for user_theme, weight in user_weights.items():
         #check that user theme is defined in the list of themes
@@ -20,7 +21,7 @@ def score_one_book(
             continue
         u_vec = theme_matrix[theme_index[user_theme]]
 
-        #find the best matching book theme 
+        #find the best matching book theme
         best = 0.0
         for book_theme, prominence in book_themes.items():
             if book_theme not in theme_index:
@@ -31,7 +32,7 @@ def score_one_book(
 
         total += weight * best
 
-    return total
+    return total / max(1.0, prominence_sum ** 0.5)
 
 
 def score_all_books(

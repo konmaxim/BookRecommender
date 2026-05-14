@@ -178,9 +178,7 @@ def run(conn, only_bertopic: bool = False) -> None:
     """, conn)
     log.info("Loaded %d books", len(df))
 
-    # ------------------------------------------------------------------
-    # Stage 1 — zero-shot
-    # ------------------------------------------------------------------
+
     log.info("Stage 1: zero-shot classification (%d themes)...", len(ALL_THEMES))
     classifier = pipeline("zero-shot-classification", model=cfg.classify_model)
 
@@ -209,9 +207,7 @@ def run(conn, only_bertopic: bool = False) -> None:
     conn.commit()
     log.info("Stage 1 results saved.")
 
-    # ------------------------------------------------------------------
-    # Stage 2 — BERTopic fallback
-    # ------------------------------------------------------------------
+
     unclassified = df[~df["id"].isin(classified_ids)].reset_index(drop=True)
 
     if unclassified.empty:
@@ -236,7 +232,6 @@ def _run_bertopic_stage(conn, df: pd.DataFrame) -> None:
     topics, _ = topic_model.fit_transform(docs)
 
     # Merge similar small clusters into their nearest neighbours using
-    # BERTopic's built-in topic similarity reduction. "auto" uses the same
     # HDBSCAN linkage to decide which topics to merge.
     n_before = len(set(t for t in topics if t != -1))
     topic_model.reduce_topics(docs, nr_topics="auto")

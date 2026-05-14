@@ -87,6 +87,20 @@ CREATE TABLE IF NOT EXISTS user_interactions (
 );
 CREATE INDEX IF NOT EXISTS idx_interactions_user   ON user_interactions (user_id);
 CREATE INDEX IF NOT EXISTS idx_interactions_anon   ON user_interactions (anon_id);
+
+CREATE TABLE IF NOT EXISTS recommendation_events (
+    event_id        BIGSERIAL PRIMARY KEY,
+    user_id         INT NOT NULL,
+    book_id         INT NOT NULL,
+    event_type      TEXT NOT NULL,  -- 'shown', 'liked', 'skipped', 'saved'
+    rank_position   INT,
+    recsys_version  TEXT NOT NULL,
+    session_id      TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_rec_events_user    ON recommendation_events (user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_rec_events_version ON recommendation_events (recsys_version, event_type);
+CREATE INDEX IF NOT EXISTS idx_rec_events_session ON recommendation_events (session_id);
 """
 
 
@@ -331,6 +345,62 @@ def log_interaction(
             (user_id, anon_id, book_id, event),
         )
     conn.commit()
+
+
+def log_recommendation_event(
+    conn: "PGConnection",
+    user_id: int,
+    book_id: int,
+    event_type: str,
+    recsys_version: str,
+    rank_position: int | None = None,
+    session_id: str | None = None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO recommendation_events
+                (user_id, book_id, event_type, rank_position, recsys_version, session_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (user_id, book_id, event_type, rank_position, recsys_version, session_id),
+        )
+    conn.commit()
+
+
+def get_user_library(conn: "PGConnection", user_id: int) -> dict:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT b.id, b.title, b.author, b.genre
+            FROM saved_books sb JOIN books b ON b.id = sb.book_id
+            WHERE sb.user_id = %s ORDER BY sb.saved_at DESC
+            """,
+            (user_id,),
+        )
+        chosen = [
+            {"book_id": r[0], "title": r[1], "author": r[2] or "", "genre": r[3]}
+            for r in cur.fetchall()
+        ]
+
+        def _fetch_event(event_type):
+            cur.execute(
+                """
+                SELECT DISTINCT ON (re.book_id) b.id, b.title, b.author, b.genre
+                FROM recommendation_events re JOIN books b ON b.id = re.book_id
+                WHERE re.user_id = %s AND re.event_type = %s
+                ORDER BY re.book_id, re.created_at DESC
+                """,
+                (user_id, event_type),
+            )
+            return [
+                {"book_id": r[0], "title": r[1], "author": r[2] or "", "genre": r[3]}
+                for r in cur.fetchall()
+            ]
+
+        liked = _fetch_event("liked")
+        saved = _fetch_event("saved")
+    return {"chosen": chosen, "liked": liked, "saved": saved}
 
 
 def get_user(conn: "PGConnection", name: str) -> User | None:

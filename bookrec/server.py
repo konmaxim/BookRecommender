@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -9,8 +10,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
-from .db import get_db, create_tables, upsert_user, get_user, get_top_books_by_genre, save_books, log_interaction
+from .db import (
+    get_db, create_tables, upsert_user, get_user, get_top_books_by_genre,
+    save_books, log_interaction, log_recommendation_event, get_user_library,
+)
 from .recommender import engine
+from .recommender.engine import RECSYS_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -67,10 +72,13 @@ class SaveBooksBody(BaseModel):
 
 
 class InteractBody(BaseModel):
-    user_id: str           
-    db_user_id: Optional[int] = None  
+    user_id: str
+    db_user_id: Optional[int] = None
     item_id: int
-    event: str
+    event: str                          # 'like' | 'skip' | 'save' | 'shown'
+    session_id: Optional[str] = None
+    rank_position: Optional[int] = None
+    recsys_version: Optional[str] = None
 
 
 @app.post("/register", status_code=201)
@@ -155,28 +163,59 @@ def recommendations(
                 )
         else:
             results = engine.popularity_fallback(top_k=top_k, excluded=already_seen)
-        return results
+
+        session_id = str(uuid.uuid4())
+        for rank, book_dict in enumerate(results):
+            book_dict["rank_position"] = rank
+            book_dict["session_id"] = session_id
+            book_dict["recsys_version"] = RECSYS_VERSION
+        return {"session_id": session_id, "version": RECSYS_VERSION, "items": results}
     except Exception:
         log.exception("recommendations failed")
         raise HTTPException(status_code=500, detail="Server error")
 
 
+_EVENT_MAP = {"like": "liked", "skip": "skipped", "save": "saved", "shown": "shown"}
+
 @app.post("/interact")
 def interact(body: InteractBody):
-    if body.event not in ("like", "skip", "save"):
-        raise HTTPException(status_code=400, detail="event must be like, skip, or save")
+    if body.event not in _EVENT_MAP:
+        raise HTTPException(status_code=400, detail="event must be like, skip, save, or shown")
     try:
         with get_db() as conn:
-            log_interaction(
-                conn,
-                book_id=body.item_id,
-                event=body.event,
-                user_id=body.db_user_id,
-                anon_id=body.user_id,
-            )
+            # user_interactions only tracks like/skip/save (not shown)
+            if body.event in ("like", "skip", "save"):
+                log_interaction(
+                    conn,
+                    book_id=body.item_id,
+                    event=body.event,
+                    user_id=body.db_user_id,
+                    anon_id=body.user_id,
+                )
+            # recommendation_events tracks all event types for logged-in users
+            if body.db_user_id is not None:
+                log_recommendation_event(
+                    conn,
+                    user_id=body.db_user_id,
+                    book_id=body.item_id,
+                    event_type=_EVENT_MAP[body.event],
+                    recsys_version=body.recsys_version or RECSYS_VERSION,
+                    rank_position=body.rank_position,
+                    session_id=body.session_id,
+                )
     except Exception:
         log.exception("interact failed")
     return {"ok": True}
+
+
+@app.get("/library")
+def library(db_user_id: int = Query(...)):
+    try:
+        with get_db() as conn:
+            return get_user_library(conn, db_user_id)
+    except Exception:
+        log.exception("library failed")
+        raise HTTPException(status_code=500, detail="Server error")
 
 
 @app.post("/refresh-engine")

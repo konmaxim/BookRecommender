@@ -372,6 +372,60 @@
     }
     .btn-logout:hover { background: var(--color-skip-bg); }
 
+    /* ── Library screen ─────────────────────────────────────────────────── */
+    .library {
+      max-width: 720px;
+      margin: 0 auto;
+      padding-bottom: var(--space-20);
+    }
+    .lib-header {
+      padding: var(--space-10) var(--space-6) var(--space-5);
+    }
+    .lib-title {
+      font-family: var(--font-serif);
+      font-size: var(--text-xl); font-weight: 600;
+      line-height: 1.2;
+    }
+    .lib-section {
+      padding: 0 var(--space-6) var(--space-8);
+    }
+    .lib-section__heading {
+      font-size: var(--text-sm); font-weight: 600;
+      color: var(--color-text-muted);
+      letter-spacing: 0.06em; text-transform: uppercase;
+      margin-bottom: var(--space-3);
+    }
+    .lib-section__empty {
+      font-size: var(--text-sm); color: var(--color-text-muted);
+      padding: var(--space-4) 0;
+    }
+    .lib-row {
+      display: flex; align-items: center; gap: var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .lib-row:last-child { border-bottom: none; }
+    .book-spine--sm {
+      width: 6px; height: 44px; border-radius: 2px; flex-shrink: 0;
+    }
+    .lib-row__info { flex: 1; min-width: 0; }
+    .lib-row__title {
+      font-size: var(--text-sm); font-weight: 500;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lib-row__author {
+      font-size: var(--text-xs); color: var(--color-text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lib-row__genre {
+      font-size: var(--text-xs); color: var(--color-text-muted);
+      background: var(--color-surface-2);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-pill);
+      padding: 2px var(--space-2);
+      white-space: nowrap; flex-shrink: 0;
+    }
+
     /* ── Browse screen ───────────────────────────────────────────────────── */
     .browser {
       max-width: 720px;
@@ -836,7 +890,7 @@
 
     // ── GlobalNav ──────────────────────────────────────────────────────────────
 
-    function GlobalNav({ dbName, onAuthClick, screen, onBrowse }) {
+    function GlobalNav({ dbName, onAuthClick, screen, onBrowse, onLibrary }) {
       return (
         <nav className="nav">
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-5)" }}>
@@ -846,6 +900,12 @@
               style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >BookRec</button>
             {screen === "feed" && (
+              <button className="nav__browse-link" onClick={onBrowse}>Browse</button>
+            )}
+            {screen !== "library" && dbName && (
+              <button className="nav__browse-link" onClick={onLibrary}>Library</button>
+            )}
+            {screen === "library" && (
               <button className="nav__browse-link" onClick={onBrowse}>Browse</button>
             )}
           </div>
@@ -1075,13 +1135,25 @@
 
     // ── BookCard ───────────────────────────────────────────────────────────────
 
-    function BookCard({ book, removingDir, onInteract }) {
+    function BookCard({ book, removingDir, onInteract, onShown }) {
       const [disabled, setDisabled] = React.useState(false);
+      const cardRef = React.useRef(null);
+
+      React.useEffect(() => {
+        const observer = new IntersectionObserver(([entry]) => {
+          if (entry.isIntersecting) {
+            onShown(book);
+            observer.disconnect();
+          }
+        }, { threshold: 0.5 });
+        if (cardRef.current) observer.observe(cardRef.current);
+        return () => observer.disconnect();
+      }, []);
 
       const handle = event => {
         if (disabled) return;
         setDisabled(true);
-        onInteract(book.item_id, event);
+        onInteract(book, event);
       };
 
       const pct        = book.score != null ? Math.round(book.score * 100) : null;
@@ -1095,7 +1167,7 @@
                           : "";
 
       return (
-        <article className={`book-card${removingClass}`}>
+        <article ref={cardRef} className={`book-card${removingClass}`}>
           <div className="book-card__meta">
             {book.genre && <span className="book-card__genre">{book.genre}</span>}
             {pct !== null && (
@@ -1155,10 +1227,10 @@
           if (seenIdsRef.current.size > 0) params.set("seen", [...seenIdsRef.current].join(","));
           const res = await fetch(`${API_BASE}/recommendations?${params}`);
           if (!res.ok) throw new Error(res.status);
-          const data = await res.json();
+          const { items } = await res.json();
           setBooks(prev => {
             const prevIds = new Set(prev.map(b => b.item_id));
-            const fresh = data.filter(b => !prevIds.has(b.item_id));
+            const fresh = items.filter(b => !prevIds.has(b.item_id));
             fresh.forEach(b => seenIdsRef.current.add(b.item_id));
             return [...prev, ...fresh];
           });
@@ -1178,7 +1250,28 @@
         if (!loading && !error && active > 0 && active < LOW_THRESHOLD) fetchRecs();
       }, [books, removingDirs, loading, error, fetchRecs]);
 
-      const handleInteract = React.useCallback(async (itemId, event) => {
+      const postInteract = React.useCallback((book, event) => {
+        fetch(`${API_BASE}/interact`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id:       userId,
+            db_user_id:    dbUserId ? parseInt(dbUserId) : null,
+            item_id:       book.item_id,
+            event,
+            session_id:    book.session_id    ?? null,
+            rank_position: book.rank_position ?? null,
+            recsys_version: book.recsys_version ?? null,
+          }),
+        }).catch(() => { /* best-effort */ });
+      }, [userId, dbUserId]);
+
+      const handleShown = React.useCallback(book => {
+        if (dbUserId) postInteract(book, "shown");
+      }, [dbUserId, postInteract]);
+
+      const handleInteract = React.useCallback((book, event) => {
+        const itemId = book.item_id;
         const dir = (event === "skip") ? "left" : "right";
         setRemovingDirs(prev => ({ ...prev, [itemId]: dir }));
 
@@ -1187,19 +1280,8 @@
           setRemovingDirs(prev => { const n = { ...prev }; delete n[itemId]; return n; });
         }, ANIM_MS);
 
-        try {
-          await fetch(`${API_BASE}/interact`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              user_id:    userId,
-              db_user_id: dbUserId ? parseInt(dbUserId) : null,
-              item_id:    itemId,
-              event,
-            }),
-          });
-        } catch { /* best-effort */ }
-      }, [userId, dbUserId]);
+        postInteract(book, event);
+      }, [postInteract]);
 
       const activeBooks = books.filter(b => !removingDirs[b.item_id]);
       const isEmpty = !loading && !error && books.length === 0;
@@ -1227,6 +1309,7 @@
                 book={book}
                 removingDir={removingDirs[book.item_id] || null}
                 onInteract={handleInteract}
+                onShown={handleShown}
               />
             ))}
           </div>
@@ -1244,6 +1327,90 @@
               <button className="btn-ghost" onClick={fetchRecs}>Refresh</button>
             </div>
           )}
+        </div>
+      );
+    }
+
+    // ── LibraryScreen ──────────────────────────────────────────────────────────
+
+    function LibraryBookRow({ book }) {
+      const spineColor = React.useMemo(() => bubbleColor(book.title + book.author), [book.title, book.author]);
+      return (
+        <div className="lib-row">
+          <div className="book-spine book-spine--sm" style={{ background: spineColor }} />
+          <div className="lib-row__info">
+            <div className="lib-row__title">{book.title}</div>
+            {book.author && <div className="lib-row__author">{book.author}</div>}
+          </div>
+          {book.genre && <span className="lib-row__genre">{book.genre}</span>}
+        </div>
+      );
+    }
+
+    function LibrarySection({ title, books, emptyText }) {
+      return (
+        <div className="lib-section">
+          <h2 className="lib-section__heading">{title}</h2>
+          {books.length === 0
+            ? <p className="lib-section__empty">{emptyText}</p>
+            : books.map(b => <LibraryBookRow key={b.book_id} book={b} />)
+          }
+        </div>
+      );
+    }
+
+    function LibraryScreen({ dbUserId, showToast, onNeedRegister }) {
+      const [data,    setData]    = React.useState(null);
+      const [loading, setLoading] = React.useState(true);
+
+      React.useEffect(() => {
+        if (!dbUserId) { setLoading(false); return; }
+        fetch(`${API_BASE}/library?db_user_id=${dbUserId}`)
+          .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+          .then(d => { setData(d); setLoading(false); })
+          .catch(() => { showToast("Couldn't load library.", "error"); setLoading(false); });
+      }, [dbUserId]);
+
+      if (loading) return (
+        <div className="screen library">
+          <div className="loading-center" style={{ paddingTop: 60 }}>
+            <div className="spinner" /><span className="loading-text">Loading…</span>
+          </div>
+        </div>
+      );
+
+      if (!dbUserId) return (
+        <div className="screen library">
+          <div className="lib-header">
+            <h1 className="lib-title">Your library</h1>
+          </div>
+          <div className="empty-state">
+            <p className="empty-state__text">Sign in to see your saved books.</p>
+            <button className="btn-ghost" onClick={onNeedRegister}>Sign in</button>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="screen library">
+          <div className="lib-header">
+            <h1 className="lib-title">Your library</h1>
+          </div>
+          <LibrarySection
+            title="My picks"
+            books={data?.chosen ?? []}
+            emptyText="No picks yet — browse and save books you've enjoyed."
+          />
+          <LibrarySection
+            title="Liked"
+            books={data?.liked ?? []}
+            emptyText="No liked books from the feed yet."
+          />
+          <LibrarySection
+            title="Saved"
+            books={data?.saved ?? []}
+            emptyText="No saved books from the feed yet."
+          />
         </div>
       );
     }
@@ -1423,9 +1590,10 @@
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
       }, []);
 
-      const goToFeed   = React.useCallback(() => setScreen("feed"), []);
-      const goToBrowse = React.useCallback(() => setScreen("browse"), []);
-      const openAuth   = React.useCallback(() => setShowAuth(true), []);
+      const goToFeed    = React.useCallback(() => setScreen("feed"), []);
+      const goToBrowse  = React.useCallback(() => setScreen("browse"), []);
+      const goToLibrary = React.useCallback(() => setScreen("library"), []);
+      const openAuth    = React.useCallback(() => setShowAuth(true), []);
 
       const handleAuthSuccess = React.useCallback(() => {
         setDbUserId(localStorage.getItem("bookrec_db_user_id"));
@@ -1447,7 +1615,7 @@
       return (
         <>
           <Toast toasts={toasts} />
-          <GlobalNav dbName={dbName} onAuthClick={() => setShowAuth(true)} screen={screen} onBrowse={goToBrowse} />
+          <GlobalNav dbName={dbName} onAuthClick={() => setShowAuth(true)} screen={screen} onBrowse={goToBrowse} onLibrary={goToLibrary} />
 
           {showAuth && (
             dbName
@@ -1469,6 +1637,13 @@
               userId={userIdRef.current}
               dbUserId={dbUserId}
               showToast={showToast}
+            />
+          )}
+          {screen === "library" && (
+            <LibraryScreen
+              dbUserId={dbUserId}
+              showToast={showToast}
+              onNeedRegister={openAuth}
             />
           )}
         </>
