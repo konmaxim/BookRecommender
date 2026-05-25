@@ -7,7 +7,17 @@ if TYPE_CHECKING:
     from psycopg2.extensions import connection as PGConnection
 
 
-def load_books_themes(conn: "PGConnection") -> dict[int, dict[str, float]]:
+def load_books_themes(
+    conn: "PGConnection",
+    length_norm_alpha: float = 0.75,
+) -> dict[int, dict[str, float]]:
+    """
+    Pivoted length normalization for longer descriptions to be retrieved less :
+
+        normalized[t] = raw[t] / ((1 - alpha) * pivot + alpha * length)
+
+    where length is the desc's L2 and pivot is the catalog mean.
+    """
     with conn.cursor() as cur:
         cur.execute("""
             SELECT id, tags->'topics' AS topics
@@ -17,8 +27,9 @@ def load_books_themes(conn: "PGConnection") -> dict[int, dict[str, float]]:
               AND jsonb_array_length(tags->'topics') > 0
         """)
         rows = cur.fetchall()
- #dict key = book_id, value = dict(theme_name(str-immutable), score)
-    books_themes: dict[int, dict[str, float]] = {}
+
+    raw: dict[int, dict[str, float]] = {}
+    lengths: dict[int, float] = {}
     for book_id, topics in rows:
         if not topics:
             continue
@@ -27,8 +38,23 @@ def load_books_themes(conn: "PGConnection") -> dict[int, dict[str, float]]:
             for t in topics
             if isinstance(t, dict) and "label" in t and "score" in t
         }
-        if themes:
+        if not themes:
+            continue
+        raw[book_id] = themes
+        lengths[book_id] = sum(v ** 2 for v in themes.values()) ** 0.5
+
+    if not raw:
+        return {}
+
+    pivot = sum(lengths.values()) / len(lengths)
+
+    books_themes: dict[int, dict[str, float]] = {}
+    for book_id, themes in raw.items():
+        divisor = (1 - length_norm_alpha) * pivot + length_norm_alpha * lengths[book_id]
+        if divisor <= 0:
             books_themes[book_id] = themes
+        else:
+            books_themes[book_id] = {k: v / divisor for k, v in themes.items()}
 
     return books_themes
 

@@ -47,9 +47,12 @@ class Config:
     classify_model: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
     claude_model: str = "claude-sonnet-4-6"
 
-    # Thresholds 
+    # Thresholds
     theme_score_threshold: float = 0.3
     embed_batch_size: int = 32
+
+    # Recommender
+    theme_length_norm_alpha: float = 0.75  # 0 = no per-book length effect, 1 = full L2 norm
 
 
 cfg = Config()

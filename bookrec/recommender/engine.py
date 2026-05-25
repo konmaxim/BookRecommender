@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..config import cfg
 from .catalog import load_books_themes, compute_catalog_mass
 from .embeddings import ThemeEmbeddings
 from .recommend import recommend
@@ -28,7 +29,7 @@ class RecommendEngine:
 
     def load(self, conn: "PGConnection") -> None:
 
-        self._books_themes = load_books_themes(conn)
+        self._books_themes = load_books_themes(conn, length_norm_alpha=cfg.theme_length_norm_alpha)
         self._catalog_mass = compute_catalog_mass(self._books_themes)
         self._books_meta = _load_books_meta(conn)
         self._embeddings.build()
@@ -40,7 +41,7 @@ class RecommendEngine:
         )
 
     def refresh(self, conn: "PGConnection") -> None:
-        self._books_themes = load_books_themes(conn)
+        self._books_themes = load_books_themes(conn, length_norm_alpha=cfg.theme_length_norm_alpha)
         self._catalog_mass = compute_catalog_mass(self._books_themes)
         self._books_meta = _load_books_meta(conn)
         log.info("Catalog refreshed: %d books with themes", len(self._books_themes))

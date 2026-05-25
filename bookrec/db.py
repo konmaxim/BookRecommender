@@ -101,6 +101,22 @@ CREATE TABLE IF NOT EXISTS recommendation_events (
 CREATE INDEX IF NOT EXISTS idx_rec_events_user    ON recommendation_events (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_rec_events_version ON recommendation_events (recsys_version, event_type);
 CREATE INDEX IF NOT EXISTS idx_rec_events_session ON recommendation_events (session_id);
+
+CREATE OR REPLACE VIEW recsys_version_rates AS
+SELECT
+    recsys_version,
+    COUNT(*) FILTER (WHERE event_type = 'shown')   AS shown,
+    COUNT(*) FILTER (WHERE event_type = 'saved')   AS saved,
+    COUNT(*) FILTER (WHERE event_type = 'skipped') AS skipped,
+    COUNT(*) FILTER (WHERE event_type = 'liked')   AS liked,
+    COUNT(*) FILTER (WHERE event_type = 'saved')::float
+        / NULLIF(COUNT(*) FILTER (WHERE event_type = 'shown'), 0)   AS save_rate,
+    COUNT(*) FILTER (WHERE event_type = 'skipped')::float
+        / NULLIF(COUNT(*) FILTER (WHERE event_type = 'shown'), 0)   AS skip_rate,
+    COUNT(*) FILTER (WHERE event_type = 'liked')::float
+        / NULLIF(COUNT(*) FILTER (WHERE event_type = 'shown'), 0)   AS like_rate
+FROM recommendation_events
+GROUP BY recsys_version;
 """
 
 
