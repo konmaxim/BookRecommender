@@ -1,0 +1,128 @@
+You are extracting the specific intellectual ideas that a book engages with, 
+for use in a book recommendation system. The system matches readers based on 
+shared ideas between books they have enjoyed and candidate recommendations.
+
+Extract all ideas in RUSSIAN, regardless of the book's original language. 
+For non-Russian books, translate the idea into the form a literate Russian 
+reader would use to describe it. Use established Russian terms where they 
+exist (e.g. "категорический императив", not a literal translation of 
+"categorical imperative").
+
+The description provided is a starting point. If you have substantive 
+knowledge of this book from other sources, draw on it to extract ideas 
+the description may not mention — but only when you are confident this 
+is the same book you know. Do not invent ideas based on the author's 
+other works or the genre. If you do not have reliable knowledge of this 
+specific book beyond the description, work from the description alone.
+═══════════════════════════════════════════════════════════════════════
+WHAT COUNTS AS AN IDEA
+═══════════════════════════════════════════════════════════════════════
+
+An idea is a specific intellectual concept, argument, thought experiment, 
+framework, claim, or sustained inquiry that the book engages with 
+substantively. It must be specific enough that you could plausibly name 
+another book that engages with the same idea.
+
+Ideas come in two kinds, and both are valuable:
+
+POSITION-IDEAS: claims that one can argue for or against.
+  Examples:
+    • "трудовая теория стоимости"
+    • "легитимность большевистской власти"  
+    • "несовместимость свободы воли и детерминизма"
+    • "частная собственность как естественное право"
+    • "закон Гудхарта"
+    • "моральный реализм"
+
+INQUIRY-IDEAS: questions, framings, or sustained explorations that the 
+book treats as worthy of attention but does not resolve into a position.
+  Examples:
+    • "возможность существования Бога в аморальном мире"
+    • "природа русской души"
+    • "личная ответственность за несовершенство мира"
+    • "моральный выбор в условиях войны"
+    • "соотношение страдания и смысла"
+    • "что делает жизнь осмысленной"
+
+The SAME surface phrase can be either type depending on how the book engages 
+with it. "Существование Бога" treated as an unresolved question in Достоевский 
+is an inquiry-idea; treated as a claim to be defended or refuted in a work of 
+apologetics or atheist polemic, it is a position-idea. Decide based on how 
+THIS book treats the idea, not on the phrasing alone.
+
+A great work of literature often engages with more inquiries than positions. 
+A great work of polemic often engages with more positions than inquiries. 
+Do not force a stance onto an inquiry-idea, and do not avoid inquiry-ideas 
+because they lack stance.
+
+═══════════════════════════════════════════════════════════════════════
+WHAT DOES NOT COUNT AS AN IDEA
+═══════════════════════════════════════════════════════════════════════
+
+Too broad (these are themes, handled by a separate system):
+  ✗ "любовь", "смерть", "свобода", "семья", "война", "философия"
+
+Too specific (plot points, not ideas):
+  ✗ "роман Анны с Вронским"
+  ✗ "убийство старухи-процентщицы"  
+  ✗ "сцена дуэли"
+
+Too vague to match across books:
+  ✗ "человеческая природа"
+  ✗ "смысл жизни вообще"
+  ✗ "сложность бытия"
+
+Craft, genre, or stylistic features (not intellectual ideas):
+  ✗ "ненадёжный рассказчик"
+  ✗ "поток сознания"
+  ✗ "магический реализм как приём"
+
+═══════════════════════════════════════════════════════════════════════
+STANCE AND STRENGTH
+═══════════════════════════════════════════════════════════════════════
+
+For each idea, tag a STANCE:
+
+  • argues_for — the book takes and defends this position
+  • argues_against — the book takes and defends the opposing position
+  • presents_both_sides — the book seriously engages with multiple positions 
+    on this and does not endorse one (common in dialogic literature)
+  • depicts_neutrally — the book portrays this without authorial argument 
+    (common in literary fiction that shows rather than tells)
+  • not_a_stance_idea — this is an inquiry-idea: a question or sustained 
+    exploration rather than a claim that admits of for/against
+
+Use "not_a_stance_idea" for ALL inquiry-ideas. Do not invent a stance where 
+the book does not take one.
+
+For each idea, also tag STRENGTH:
+
+  • central — one of the book's primary intellectual concerns (aim for 1–3)
+  • substantial — a significant engagement, but not central (4–8 typical)
+  • passing — meaningfully present but not a major focus
+
+═══════════════════════════════════════════════════════════════════════
+HOW MANY IDEAS
+═══════════════════════════════════════════════════════════════════════
+
+Extract between 7 and 14 ideas, depending on how much the book actually 
+engages with. Err toward fewer for narrowly focused books, more for sprawling 
+works of ideas. Do not pad. If a book genuinely has only 10 substantive 
+ideas, return 10.
+
+═══════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════════════
+
+Return ONLY valid JSON in exactly this format, with no preamble or commentary:
+
+{
+  "ideas": [
+    {
+      "idea": "<idea in Russian>",
+      "stance": "<one of: argues_for | argues_against | presents_both_sides | depicts_neutrally | not_a_stance_idea>",
+      "strength": "<one of: central | substantial | passing>"
+    }
+  ]
+}
+

@@ -1,0 +1,16 @@
+═══════════════════════════════════════════════════════════════════════
+YOUR TASK 
+═══════════════════════════════════════════════════════════════════════
+
+Decide stance using this test: if the author of this specific book, writing this specific book, were shown the idea as a single proposition, would they nod in agreement or shake their head? 
+Judge by the position the book itself takes, not the author's general views across their career. If they would nod, the stance is argues_for, regardless of whether the content of the idea is positive or negative.
+If they would shake their head, it is argues_against.
+
+
+═══════════════════════════════════════════════════════════════════════
+Example
+═══════════════════════════════════════════════════════════════════════
+Idea: "Американская мечта и её разрушительное воздействие на творческую личность" (book: The "Гений" Теодора Драйзера)
+Naive reading: contains "разрушительное" (destructive), surface negative valence → argues_against. This is wrong.
+Correct reading: Dreiser affirms the causal claim that the American Dream destroys artistic personalities. Would Dreiser nod at this proposition? Yes — it's the thesis of his work. → argues_for.
+
