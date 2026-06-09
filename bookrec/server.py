@@ -136,6 +136,10 @@ def save_books_route(body: SaveBooksBody):
     try:
         with get_db() as conn:
             n = save_books(conn, body.user_id, body.book_ids)
+            try:
+                engine.refresh_user_idea_profile(conn, body.user_id)
+            except Exception:
+                log.exception("refresh_user_idea_profile failed (will rebuild lazily next request)")
         return {"saved": n}
     except Exception:
         log.exception("save-books failed")
@@ -203,6 +207,12 @@ def interact(body: InteractBody):
                     rank_position=body.rank_position,
                     session_id=body.session_id,
                 )
+            # liked/saved change the library → eagerly rebuild the idea profile
+            if body.db_user_id is not None and body.event in ("like", "save"):
+                try:
+                    engine.refresh_user_idea_profile(conn, body.db_user_id)
+                except Exception:
+                    log.exception("refresh_user_idea_profile failed (will rebuild lazily next request)")
     except Exception:
         log.exception("interact failed")
     return {"ok": True}

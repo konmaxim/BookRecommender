@@ -47,9 +47,17 @@ class Config:
     classify_model: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
     claude_model: str = "claude-sonnet-4-6"
 
-    # Thresholds 
+    # Thresholds
     theme_score_threshold: float = 0.3
     embed_batch_size: int = 32
+
+    # Idea channel (see idea_stance_channel_spec_1.md §Config)
+    idea_lambda: float = 2.0      # asymmetric penalty on stance disagreement
+    idea_beta: float = 0.4        # exploration discount for neutral pairs
+    idea_gamma: float = 1.0       # blend weight: score = theme + gamma * idea
+    idea_sim_floor: float = 0.75  # min cosine to count as a fuzzy match
+                                  # (FRIDA argmax cosines sit in 0.65–0.78 on RU literary text;
+                                  # 0.5 is functionally always-pass, 0.75 keeps only top-decile matches)
 
 
 cfg = Config()

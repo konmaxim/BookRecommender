@@ -101,6 +101,16 @@ CREATE TABLE IF NOT EXISTS recommendation_events (
 CREATE INDEX IF NOT EXISTS idx_rec_events_user    ON recommendation_events (user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_rec_events_version ON recommendation_events (recsys_version, event_type);
 CREATE INDEX IF NOT EXISTS idx_rec_events_session ON recommendation_events (session_id);
+
+CREATE TABLE IF NOT EXISTS user_idea_profile (
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    canonical_idea_id INTEGER NOT NULL,
+    engagement        DOUBLE PRECISION NOT NULL,
+    net_stance        DOUBLE PRECISION NOT NULL,
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, canonical_idea_id)
+);
+CREATE INDEX IF NOT EXISTS idx_uip_user ON user_idea_profile (user_id);
 """
 
 
@@ -413,3 +423,78 @@ def get_user(conn: "PGConnection", name: str) -> User | None:
     user_id = row[0]
     ratings = get_user_ratings(conn, user_id)
     return User(name=name, id=user_id, ratings=ratings)
+
+
+def upsert_user_idea_profile(
+    conn: "PGConnection",
+    user_id: int,
+    items: list[dict],
+) -> None:
+    """
+    Replace this user's profile rows in one shot. `items` is a list of
+    {cid, engagement, net_stance} dicts (matching build_user_idea_profile output).
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM user_idea_profile WHERE user_id = %s", (user_id,))
+        if items:
+            psycopg2.extras.execute_values(
+                cur,
+                """
+                INSERT INTO user_idea_profile
+                    (user_id, canonical_idea_id, engagement, net_stance)
+                VALUES %s
+                """,
+                [
+                    (user_id, int(it["cid"]), float(it["a"]), float(it["p"]))
+                    for it in items
+                ],
+            )
+    conn.commit()
+
+
+def load_user_idea_profile(
+    conn: "PGConnection",
+    user_id: int,
+) -> list[dict]:
+    """Returns [{cid, a (engagement), p (net_stance)}, ...]."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT canonical_idea_id, engagement, net_stance
+            FROM user_idea_profile
+            WHERE user_id = %s
+            """,
+            (user_id,),
+        )
+        return [
+            {"cid": int(cid), "a": float(a), "p": float(p)}
+            for cid, a, p in cur.fetchall()
+        ]
+
+
+def get_user_idea_profile_freshness(
+    conn: "PGConnection",
+    user_id: int,
+) -> tuple[object | None, object | None]:
+    """
+    Returns (max(updated_at) on profile rows, max(created_at) on
+    user_interactions). Caller checks: if profile is None or older
+    than the latest interaction, rebuild.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT MAX(updated_at) FROM user_idea_profile WHERE user_id = %s",
+            (user_id,),
+        )
+        profile_ts = cur.fetchone()[0]
+        cur.execute(
+            """
+            SELECT GREATEST(
+                COALESCE((SELECT MAX(created_at) FROM user_interactions WHERE user_id = %s), 'epoch'),
+                COALESCE((SELECT MAX(saved_at)   FROM saved_books       WHERE user_id = %s), 'epoch')
+            )
+            """,
+            (user_id, user_id),
+        )
+        library_ts = cur.fetchone()[0]
+    return profile_ts, library_ts

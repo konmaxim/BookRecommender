@@ -12,7 +12,7 @@
 
 ### Пайплайн классификации (два этапа)
 
-**Этап 1 — Zero-shot классификация.** Каждое описание книги прогоняется через `mDeBERTa-v3-base-mnli-xnli` — многоязычную NLI-модель. Ей на вход подаётся описание и список из ~50 тематических меток на русском языке (любовный роман, детектив, антиутопия, книга о войне и т.д.). Модель оценивает, насколько каждая тема подходит данной книге, и возвращает score от 0 до 1 по каждой. Темы с оценкой выше порога (0.3) сохраняются в базу как `{label, score}`.
+**Этап 1 — Zero-shot классификация.** Каждое описание книги прогоняется через `mDeBERTa-v3-base-mnli-xnli`. Ей на вход подаётся описание и список из ~50 тематических меток на русском языке (любовный роман, детектив, антиутопия, книга о войне и т.д.). Модель оценивает, насколько каждая тема подходит данной книге, и возвращает score от 0 до 1 по каждой. Темы с оценкой выше порога (0.3) сохраняются в базу как `{label, score}`.
 
 Если у книги нашлась хотя бы одна тема — она считается классифицированной. Остальные идут на второй этап.
 
@@ -20,27 +20,38 @@
 
 ### Тематические эмбеддинги
 
-Все ~50 тематических меток кодируются в векторы через `sentence-transformers/paraphrase-multilingual-mpnet-base-v2` с нормализацией (единичная норма). Это позволяет измерять семантическую близость между темами через обычное скалярное произведение — оно же косинусное сходство для нормированных векторов.
+Все 52 тематических меток кодируются в векторы через `sentence-transformers/paraphrase-multilingual-mpnet-base-v2` с нормализацией (единичная норма). Это позволяет измерять семантическую близость между темами через обычное скалярное произведение — оно же косинусное сходство для нормированных векторов.
 
 Эта матрица строится один раз при старте сервера и остаётся в памяти.
 
 ### Формула рекомендаций
 
-Алгоритм работает с понятиями *масс* — по аналогии с TF-IDF, только для тем.
+**Нормализация prominence — pivoted length.** Сырые score-ы из zero-shot пропускаются через pivoted length normalization (Singhal et al., 1996), чтобы книги с большим числом тем не доминировали просто за счёт объёма:
+
+```
+prominence(t, b) = raw_score(t, b) / ((1 − α) · pivot + α · ‖b‖₂)
+```
+
+где `‖b‖₂` — L2-норма вектора тем книги b, а `pivot` — средняя L2-норма по каталогу. Параметр α ∈ [0, 1] (по умолчанию 0.75, настраивается через `cfg.theme_length_norm_alpha`):
+- **α = 0** — нет per-book эффекта, делитель константный → старая нормировка "глобальный rescale".
+- **α = 1** — полная L2-нормировка, все книги получают единичную норму.
+- **α = 0.75** — компромисс: длинные векторы штрафуются, но не схлопываются в плоский профиль.
+
+Все дальнейшие массы и скоры считаются уже на этих нормированных prominence.
 
 **Масса каталога** — насколько тема распространена во всём каталоге:
 
 ```
-catalog_mass(t) = Σ score(t, b) / Σ_всех score(t', b')
+catalog_mass(t) = Σ_b prominence(t, b) / Σ_b, t' prominence(t', b)
 ```
 
 **Масса пользователя** — то же самое, но только по книгам, которые пользователь лайкнул или сохранил:
 
 ```
-user_mass(t) = Σ score(t, b) по лайкнутым / Σ_всех score(t', b') по лайкнутым
+user_mass(t) = Σ prominence(t, b) по лайкнутым / Σ_всех prominence(t', b') по лайкнутым
 ```
 
-**Вес темы для пользователя** — по сути log-IDF: темы, которые пользователь любит сильнее, чем среднее по каталогу, получают высокий вес. Общие темы (встречаются везде) — штрафуются:
+**Вес темы для пользователя** — аналог "log-IDF": темы, которые пользователь любит сильнее, чем среднее по каталогу, получают высокий вес. Общие темы (встречаются везде) — штрафуются/получают низкий положительный вес:
 
 ```
 weight(t) = max(-0.5, log(user_mass(t) / catalog_mass(t)))
@@ -48,21 +59,113 @@ weight(t) = max(-0.5, log(user_mass(t) / catalog_mass(t)))
 
 **Скоринг книги-кандидата:**
 
-Для каждой темы пользователя находим самую близкую тему книги с учётом её prominence (score из zero-shot). Близость — косинусное сходство между эмбеддингами тем:
+Для каждой темы пользователя находим самую близкую тему книги с учётом её prominence. Близость — косинусное сходство между эмбеддингами тем:
 
 ```
 best(u_theme, book) = max over b_theme { cos(u_theme, b_theme) × prominence(b_theme) }
 
 score(book) = Σ weight(u_theme) × best(u_theme, book)
-              ─────────────────────────────────────────
-              max(1, √(Σ prominence(b_theme) для тем книги))
 ```
 
-Нормировка на корень суммы prominences нужна, чтобы книги с большим числом тем (широкое покрытие тематик) не получали автоматически завышенный скор просто за счёт объёма.
+Старый sqrt-нормализатор в знаменателе теперь не нужен — длина вектора уже учтена в prominence через α.
+
+---
+
+## Канал идей и стенс
+
+Тематические метки — крупный мазок: они ловят жанр и общий регистр, но плохо различают книги внутри одной темы. Читатель, оценивший «Атлант расправил плечи», вряд ли заинтересуется случайной книгой с темой «философский роман». Поэтому параллельно с тематическим каналом работает второй слой — извлечение ключевых идей и матчинг по идеям с поправкой на **стенс** (за / против).
+
+### Извлечение идей
+
+`bookrec/pipeline/idea_extraction.py` подаёт описание каждой книги в Claude Haiku со структурированным промптом, требующим вернуть JSON с 8–14 идеями. Каждая идея — тройка `(idea, stance, strength)`:
+
+- **`idea`** — формулировка в стенс-нейтральном виде. Это критично: одна и та же идея должна быть похожа по эмбеддингу независимо от того, поддерживает её книга или спорит с ней. Только так две книги с противоположными позициями могут попасть в один канонический кластер и схватиться по идентичности.
+- **`stance`** — категориальная строка: `argues_for`, `argues_against`, `presents_both_sides`, `depicts_neutrally`, `not_a_stance_idea`. На загрузке нормируется в знак `−1 / 0 / +1` через `STANCE_MAP`. Fail-loud на любую строку вне маппинга — молчаливый дефолт в 0 превратил бы реальную позицию в exploration и обнулил защитный механизм.
+- **`strength`** — `central / substantial / passing`, нормируется в магнитуду 1.0 / 0.6 / 0.3.
+
+Дополнительно `bookrec/pipeline/stance_verification.py` пропускает директивные идеи (`argues_for / argues_against`) через Claude Opus для верификации — проверяется, согласится ли автор кивнуть с предложенной формулировкой.
+
+На валидационном корпусе 1,230 книг получено 13,996 идей.
+
+### Эмбеддинги и канонический словарь
+
+Каждая идея кодируется в 1536-мерный вектор моделью `ai-forever/FRIDA` (T5-encoder, 0.8B параметров, оптимизирована под русский) с префиксом `"paraphrase: "` — режим симметричного семантического сходства, подходящий для дедупликации.
+
+`bookrec/pipeline/idea_clustering.py` строит **канонический словарь идей** через agglomerative clustering с complete linkage и порогом cosine distance = 0.15 (сходство ≥ 0.85). Каждой канонической идее присваивается:
+
+- **centroid** — среднее по эмбеддингам участников кластера, L2-нормированное; используется для матчинга по cos.
+- **medoid_text** — фраза, ближайшая к центроиду; для дебага и UI.
+- **canonical_idea_id** — стабильный целочисленный id.
+
+Полученный словарь — ~9,000 канонических идей, из которых ~3,150 встречаются в ≥2 книгах. Дедупликация остаётся load-bearing по двум причинам: (1) **пулинг свидетельств** — пять книг с одной и той же идеей в разных формулировках должны слиться в один узел, чтобы профиль не размазывался; (2) **гейт по идентичности** — точный матч `canonical_idea_id` сильнее и надёжнее любого приближённого cos-попадания.
+
+Стенс и сила хранятся на ребре `(book, idea)`, а не на узле канонической идеи. Одна и та же идея может иметь `+1` в одной книге и `−1` в другой — в этом и смысл: разрешить противоположные трактовки одной идеи быть cos-соседями (а значит — матчиться) и при этом получать разный знак контрибуции.
+
+### Профиль пользователя по идеям
+
+Из лайкнутой/сохранённой библиотеки `L` строится профиль:
+
+```
+engagement a_i(u) = Σ_{b ∈ L} strength_i(b)
+
+                    Σ_{b ∈ L, stance_i(b) ≠ 0} strength_i(b) · stance_i(b)
+net_stance p_i(u) = ────────────────────────────────────────────────────────
+                    Σ_{b ∈ L, stance_i(b) ≠ 0} strength_i(b)
+```
+
+- `engagement` — сырая суммарная сила вовлечённости. Без log-lift, без IDF: для маленьких библиотек (1–3 книги) IDF вырождается (`log((1+a)/(1+catalog_mass))` схлопывается в 0, когда библиотека пользователя сама и есть почти весь catalog mass для редкой идеи), а для больших он необязателен.
+- `net_stance` — strength-взвешенное среднее **только по книгам, где пользователь занял позицию**. Нейтральные книги (`stance = 0`) не разбавляют — учитываются лишь в engagement.
+
+Профиль персистится в таблице `user_idea_profile (user_id, canonical_idea_id, engagement, net_stance, updated_at)`. Перестраивается лениво — при следующем `/recommendations`, если в библиотеке что-то изменилось после последнего апдейта профиля. На событиях `save / like` через `/interact` запускается также eager refresh.
+
+### Скоринг идея-канала
+
+Для каждой пары (профиль-идея `i`, книга-кандидат `c`) — **матч сначала, стенс потом**:
+
+1. **Матч.** Если `c` содержит ту же `canonical_idea_id`, что и `i` — identity match, `sim = 1`. Иначе ищется кандидат с максимальным cos между центроидами; если этот максимум ниже `sim_floor` (по умолчанию 0.75) — идея пропускается, контрибуции нет.
+
+2. **Стенс.** Стенс и сила читаются с **уже выбранного** кандидата (`s_c`, `σ_c`). Здесь критично: argmax считается **только по cos**, никогда по знаковому скору. Если максимизировать `cos × strength × agreement`, противоположная по стенсу идея спрячется за любой согласной идеей в той же книге, и штраф никогда не сработает. Защитный механизм держится именно на этом порядке: схожесть выбирает *что* сравнивать, стенс задаёт *знак*.
+
+3. **Контрибуция.** Маршрутизация строгая:
+   - Обе стороны направлены (`p_i ≠ 0` и `s_c ≠ 0`) → стенс-ветка. База: `a · sim · σ_c · (s_c · p_i)`. При несогласии (`base < 0`) применяется асимметричный штраф `λ > 1`.
+   - Иначе → exploration: `β · a · sim · σ_c`, всегда ≥ 0.
+
+4. **Агрегация.** Чистая сумма контрибуций по всем идеям профиля, без какой-либо нормировки на ширину книги. Per-book breadth penalty (была раньше как `M(c)^α`) удалена — нормировка контаминировала бы аггрегаты профиля и каталога, что прямо запрещено инвариантом скоринга.
+
+### Финальный скор
+
+Два канала складываются с весом `γ`:
+
+```
+score(u, c) = theme_score(u, c) + γ · idea_score(u, c)
+```
+
+Гиперпараметры идея-канала (в `cfg`):
+
+| параметр | значение | смысл |
+|----------|----------|-------|
+| `idea_lambda` | 2.0 | асимметричный штраф при несогласии стенсов |
+| `idea_beta` | 0.4 | дисконт exploration-ветки (нейтральные пары) |
+| `idea_gamma` | 1.0 | баланс между темами и идеями |
+| `idea_sim_floor` | 0.75 | минимальный cos для приближённого матча |
+
+`idea_sim_floor = 0.75` выбран осознанно: FRIDA на русской художке сжимает почти все попарные cos в полосу 0.65–0.78. Порог 0.5 функционально пропускал бы любую пару, а 0.75 оставляет только верхний дециль реальных матчей.
+
+### Инварианты
+
+Скоринг идея-канала легко сломать незаметно. Правила, которых держимся (любое нарушение → стенс-гейт молча отключается):
+
+1. **Матчить по cos, читать стенс с уже выбранного кандидата.** Argmax только по схожести.
+2. **Стенс-ветка и exploration не суммируются.** Строгий xor по маршрутизации.
+3. **Никакой нормировки на ширину книги.** Engagement — сырая сумма; финальный per-book скор — чистая сумма контрибуций.
+4. **Стенс факторизуется из текста идеи.** Держится на extraction-промпте.
+5. **Канонический словарь по обеим сторонам.** Не матчить по тексту — слитые дубли имеют разный текст.
+6. **Engagement по построению ≥ 0.** Достигается тем, что strength всегда ≥ 0; без IDF клампа не нужно.
+7. **Никакого coarse-кластеринга для связности.** Cos-матч в момент запроса *и есть* сигнал релевантности.
 
 ### Fallback
 
-Если у пользователя нет лайков — возвращаются книги с наибольшим рейтингом (popularity fallback).
+Если у пользователя нет лайков — возвращаются книги с наибольшим рейтингом (popularity fallback). Идея-канал отключается, скоринг идёт по чистым темам.
 
 ---
 
@@ -72,17 +175,36 @@ score(book) = Σ weight(u_theme) × best(u_theme, book)
 livelib.ru
     ↓ scraper
 PostgreSQL (books, reviews, tags)
-    ↓ pipeline/classify.py
-books.tags → {topics: [{label, score}]}
-    ↓ recommender/
-ThemeEmbeddings → матрица (N_тем × d)
-catalog.py → catalog_mass
-profile.py → user_mass, user_weights
-scoring.py → score_one_book / score_all_books
-engine.py → RecommendEngine
-    ↓ server.py (FastAPI)
+    │
+    ├── pipeline/classify.py            (zero-shot + BERTopic)
+    │     ↓
+    │   books.tags → {topics: [{label, score}]}
+    │     ↓
+    │   recommender/ — канал тем
+    │     catalog.py  → catalog_mass
+    │     profile.py  → user_mass, user_weights
+    │     scoring.py  → theme_score
+    │
+    └── pipeline/idea_extraction.py     (Claude Sonnet → 8–14 идей/книга)
+        pipeline/stance_verification.py (Claude Opus, верификация позиции автора)
+        pipeline/idea_clustering.py     (complete linkage, dist=0.15)
+          ↓
+        data/canonical_ideas.csv, idea_to_canonical.csv, canonical_idea_centroids.npy
+          ↓
+        recommender/ — канал идей и стенс
+          idea_normalize.py → STANCE_MAP, STRENGTH_MAP, load_extractions
+          idea_catalog.py   → load_book_ideas, load_canonical_centroids
+          idea_profile.py   → build_user_idea_profile (persists в user_idea_profile)
+          idea_scoring.py   → score_ideas (match-then-stance)
+
+         ┌────────────────────────────────┐
+         │  blend: theme + γ · idea       │  ← scoring.py / engine.py
+         └────────────────────────────────┘
+                       ↓
+                   server.py (FastAPI)
 GET /recommendations
 POST /interact → recommendation_events (rank, session, version)
+              → eager refresh user_idea_profile на save/like
 GET /library
     ↓ frontend/index.html (React SPA)
 ```
@@ -94,12 +216,14 @@ GET /library
 | Слой | Технологии |
 |------|-----------|
 | Данные | PostgreSQL + psycopg2 |
-| Классификация | mDeBERTa-v3 (Hugging Face Transformers) |
-| Кластеризация | BERTopic + HDBSCAN |
-| Эмбеддинги | sentence-transformers (paraphrase-multilingual-mpnet-base-v2) |
-| LLM-метки | Claude (Anthropic API) |
+| Тематическая классификация | mDeBERTa-v3 (Hugging Face Transformers) |
+| Тематическая кластеризация | BERTopic + HDBSCAN |
+| Тематические эмбеддинги | sentence-transformers (paraphrase-multilingual-mpnet-base-v2) |
+| Извлечение идей | Claude Sonnet (extraction) + Claude Opus (stance verification) |
+| Эмбеддинги идей | `ai-forever/FRIDA` (T5-encoder, 0.8B параметров) |
+| Дедупликация идей | scikit-learn AgglomerativeClustering (complete linkage, cosine) |
 | Бэкенд | FastAPI + Uvicorn |
-| Фронтенд | React 18 (CDN), без сборщика |
+| Фронтенд | React 18 (CDN) |
 
 ---
 
@@ -124,8 +248,18 @@ ANTHROPIC_API_KEY=...
 # Скрейп книг
 bookrec scrape
 
-# Классификация описаний
+# Тематическая классификация описаний
 bookrec classify
+
+# Извлечение идей + верификация стенса (требует ANTHROPIC_API_KEY)
+python -m bookrec.pipeline.idea_extraction
+python -m bookrec.pipeline.stance_verification
+
+# Эмбеддинги идей через FRIDA → data/idea_embeddings.npy + data/idea_metadata.csv
+#   (см. eda/idea_extraction_eda.ipynb)
+
+# Канонический словарь идей через complete-linkage кластеризацию
+bookrec cluster-ideas
 ```
 
 **Сервер:**
@@ -135,6 +269,8 @@ bookrec-server
 python -m bookrec.server
 ```
 
+При старте сервер автоматически создаёт таблицы (`create_tables`), подтягивает темы и идеи, и собирает оба канала в `RecommendEngine`. `user_idea_profile` строится лениво при первом запросе `/recommendations` от пользователя, у которого что-то в библиотеке.
+
 Фронтенд — просто открыть `frontend/index.html` в браузере.
 
 ---
@@ -143,20 +279,47 @@ python -m bookrec.server
 
 Каждое взаимодействие пользователя с лентой рекомендаций пишется в `recommendation_events` — таблицу с полями `event_type` (shown/liked/skipped/saved), `rank_position`, `session_id`, `recsys_version`. Это позволяет позже считать офлайн-метрики (precision@k, MRR и т.д.) и сравнивать версии алгоритма.
 
+Текущая `recsys_version = "themes_v1_ideas_v1"` — оба канала включены.
+
+Профиль пользователя по идеям персистится в `user_idea_profile` (по `(user_id, canonical_idea_id)`). На событиях `save / like` через `/interact` запускается eager refresh; в остальных случаях профиль пересобирается лениво при следующем `/recommendations`, если в библиотеке что-то изменилось после `updated_at`.
+
 ---
 
 ## Структура проекта
 
 ```
 bookrec/
-  scraper/       — парсинг livelib.ru
-  pipeline/      — классификация книг (zero-shot + BERTopic)
-  recommender/   — движок рекомендаций (эмбеддинги, профиль, скоринг)
-  db.py          — всё взаимодействие с БД
-  server.py      — FastAPI-приложение
-  config.py      — конфигурация из .env
+  scraper/                      — парсинг livelib.ru
+  pipeline/
+    classify.py                 — zero-shot + BERTopic
+    idea_extraction.py          — Claude Haiku, идеи + стенс + сила
+    stance_verification.py      — Claude Opus, верификация стенса
+    idea_clustering.py          — complete-linkage дедупликация идей
+  recommender/
+    catalog.py, profile.py      — канал тем: catalog_mass, user_mass, weights
+    scoring.py                  — score_themes / score_one_book / blend
+    idea_normalize.py           — STANCE_MAP, STRENGTH_MAP, load_extractions
+    idea_catalog.py             — load_book_ideas, load_canonical_centroids
+    idea_profile.py             — build_user_idea_profile
+    idea_scoring.py             — score_ideas (match-then-stance)
+    engine.py                   — RecommendEngine, оркестратор
+  prompts/
+    idea_extraction_prompt_v1.txt
+    opus_stance_verification.txt
+  db.py                         — всё взаимодействие с БД (включая user_idea_profile)
+  server.py                     — FastAPI-приложение
+  config.py                     — конфигурация из .env (включая гиперпараметры обоих каналов)
+data/
+  ideas_validation_haiku_prompt_v1.json   — источник истины по идеям
+  idea_embeddings.npy, idea_metadata.csv  — FRIDA эмбеддинги + метаданные
+  canonical_ideas.csv                     — канонический словарь (id, medoid_text, size)
+  canonical_idea_centroids.npy            — (n_canonical, 1536), unit-norm
+  idea_to_canonical.csv                   — (book_id, idea_index) → canonical_idea_id
 frontend/
-  index.html     — React SPA
-scripts/         — вспомогательные скрипты (валидация тем и т.д.)
-eda/             — ноутбуки для исследований
+  index.html                    — React SPA
+scripts/                        — вспомогательные скрипты (валидация тем и т.д.)
+eda/                            — ноутбуки для исследований, в т.ч. кластеризация идей
+tests/
+  test_idea_scoring.py          — инварианты идея-канала
+  test_idea_regression.py       — регрессия: Атлант vs Что делать?
 ```

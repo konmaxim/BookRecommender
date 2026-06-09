@@ -40,9 +40,9 @@ def extract_ideas(title: str, author: str, description: str) -> list[dict]:
     )
     text = response.content[0].text.strip()
     if text.startswith("```"):
-        text = text.split("```", 2)[1]          # drop opening fence + language tag
-        text = text[text.index("\n") + 1:]       # drop the "json" line
-        text = text.rsplit("```", 1)[0].strip()  # drop closing fence
+        text = text.split("```", 2)[1]          # cleanup
+        text = text[text.index("\n") + 1:]       # remove json
+        text = text.rsplit("```", 1)[0].strip()  
     return json.loads(text)["ideas"]
 
 

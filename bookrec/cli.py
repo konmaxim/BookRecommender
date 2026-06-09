@@ -80,6 +80,11 @@ def _cmd_embed(args: argparse.Namespace) -> None:
         embed.run(conn, output_dir=args.output_dir)
 
 
+def _cmd_cluster_ideas(args: argparse.Namespace) -> None:
+    from .pipeline import idea_clustering
+    idea_clustering.run(distance_threshold=args.distance_threshold)
+
+
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -148,6 +153,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Directory to write embeddings and metadata (default: current dir)",
     )
     p_embed.set_defaults(func=_cmd_embed)
+
+    # cluster-ideas
+    p_cluster = sub.add_parser(
+        "cluster-ideas",
+        help="Build canonical idea vocabulary via complete-linkage clustering of FRIDA embeddings",
+    )
+    p_cluster.add_argument(
+        "--distance-threshold",
+        type=float,
+        default=0.1,
+        help="Cosine distance threshold for cluster merge (default: 0.1 = similarity 0.9)",
+    )
+    p_cluster.set_defaults(func=_cmd_cluster_ideas)
 
     return parser
 
